@@ -778,6 +778,7 @@
   var LOWEST_LISTING_MAX_OUT_OF_POCKET_INPUT_ID = "steamPyPlusLowestListingPriceMaxOutOfPocket";
   var LOWEST_LISTING_THRESHOLD_STORAGE_KEY = "steamPyPlusLowestListingThreshold";
   var LOWEST_LISTING_MAX_OUT_OF_POCKET_STORAGE_KEY = "steamPyPlusLowestListingMaxOutOfPocket";
+  var LOWEST_LISTING_QUALIFY_ONLY_STORAGE_KEY = "steamPyPlusLowestListingQualifyOnly";
   var LOWEST_LISTING_PANEL_ID = "steamPyPlusLowestListingPricePanel";
   var LOWEST_LISTING_MARKER_ATTR = "data-steam-py-plus-lowest-price";
   var FILTER_ANCHOR_SELECTOR2 = ".tag.flex-row.align-items-center";
@@ -898,12 +899,16 @@
       progress.style.cssText = "font-size:.13rem;color:#666;";
       const qualifyOnly = document.createElement("label");
       qualifyOnly.style.cssText = "display:flex;align-items:center;gap:.05rem;font-size:.13rem;color:#17233d;cursor:pointer;";
+      const savedQualifyOnly = getValue?.(LOWEST_LISTING_QUALIFY_ONLY_STORAGE_KEY, true);
       const qualifyCheckbox = document.createElement("input");
       qualifyCheckbox.type = "checkbox";
-      qualifyCheckbox.checked = true;
+      qualifyCheckbox.checked = savedQualifyOnly !== false;
       qualifyCheckbox.dataset.steamPyPlusLowestQualifyOnly = "true";
       qualifyCheckbox.style.cssText = "margin:0;cursor:pointer;";
-      qualifyCheckbox.addEventListener("change", applyQualifyFilter);
+      qualifyCheckbox.addEventListener("change", () => {
+        setValue?.(LOWEST_LISTING_QUALIFY_ONLY_STORAGE_KEY, qualifyCheckbox.checked);
+        applyQualifyFilter();
+      });
       qualifyOnlyCheckbox = qualifyCheckbox;
       qualifyOnly.append(qualifyCheckbox, document.createTextNode("仅显示可用"));
       progressRow.append(progress, qualifyOnly);
