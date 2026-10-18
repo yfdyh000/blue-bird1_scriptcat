@@ -26,6 +26,7 @@ __pycache__/
 # Build inputs and vendored runtime used by tracked scripts.
 !package.json
 !pnpm-lock.yaml
+!pnpm-workspace.yaml
 !src/
 !src/lib/
 !src/lib/douban/
@@ -67,6 +68,7 @@ __pycache__/
 !scripts/userscripts/steampy-plus-seller-batch.test.mjs
 !scripts/userscripts/steampy-plus-sale-start-time.test.mjs
 !scripts/userscripts/steampy-plus-rating.test.mjs
+!scripts/userscripts/steampy-plus-lowest-listing-price.test.mjs
 !scripts/userscripts/zlib-local-owned-mark.test.mjs
 !scripts/userscripts/lint-built.cjs
 !scripts/userscripts/lint.cjs

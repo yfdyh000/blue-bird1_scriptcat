@@ -38,7 +38,7 @@ function collectEntries() {
 }
 
 function splitUserscriptMetadata(source, entryPath) {
-  const match = source.match(/^\/\/ ==UserScript==\n[\s\S]*?\n\/\/ ==\/UserScript==\n?/);
+  const match = source.match(/^\/\/ ==UserScript==\r?\n[\s\S]*?\r?\n\/\/ ==\/UserScript==\r?\n?/);
   if (!match) {
     fail(`${relative(repoRoot, entryPath)} must start with a UserScript metadata block`);
   }
