@@ -241,7 +241,6 @@ export function createSteamPyLowestListingPriceController({
       status.textContent = "页面价过高";
       status.style.color = "#999";
     } else {
-      price.textContent = "--";
       const lowest = result.lowestPrice !== null && result.lowestPrice !== undefined
         ? formatPrice(result.lowestPrice)
         : null;
@@ -249,12 +248,13 @@ export function createSteamPyLowestListingPriceController({
         ? formatPrice(result.lowestQualifyingPrice)
         : null;
       if (lowest && qualifying) {
-        status.textContent = `${result.error} · 最低 ${lowest} · 门槛价 ${qualifying}`;
+        price.textContent = `最低 ${lowest} · 达门槛最低价 ${qualifying}`;
       } else if (lowest) {
-        status.textContent = `${result.error} · 最低 ${lowest}`;
+        price.textContent = `最低 ${lowest}`;
       } else {
-        status.textContent = result.error || "查询失败";
+        price.textContent = "--";
       }
+      status.textContent = result.error || "查询失败";
       status.style.color = "#f59e0b";
     }
     row.append(name, price, status);
