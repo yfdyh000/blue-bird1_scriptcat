@@ -848,9 +848,6 @@
     function gameNameOf(game) {
       return game?.gameName || game?.name || `gameId ${gameIdOf(game) ?? "未知"}`;
     }
-    function pagePriceOf(game) {
-      return game?.keyPrice ?? game?.miniPrice ?? null;
-    }
     function resolveRegion() {
       return normalizeSteamPyRegion(vm?.areas);
     }
@@ -1008,10 +1005,6 @@
       const gameId = gameIdOf(game);
       if (gameId === null || gameId === void 0 || gameId === "") {
         return { ok: false, error: "缺少 gameId" };
-      }
-      const pagePrice = pagePriceOf(game);
-      if (maxPrice !== Infinity && pagePrice !== null && Number.isFinite(Number(pagePrice)) && Number(pagePrice) > maxPrice) {
-        return { ok: false, skip: true, error: "页面价过高" };
       }
       const response = await client.fetchKeySaleList({ region, gameId });
       const content = response?.content ?? response?.result?.content ?? response?.result ?? response;
