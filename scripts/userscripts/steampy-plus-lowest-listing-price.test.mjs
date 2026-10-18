@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  isQualifyingLowestPrice,
   normalizeSteamPyRegion,
   parseLowestInStockListing,
+  parseThreshold,
 } from "../../src/lib/steampy/steampy-plus-lowest-listing-price.js";
 
 test("normalizeSteamPyRegion accepts supported regions and falls back to cn", () => {
@@ -66,4 +68,23 @@ test("parseLowestInStockListing handles empty and invalid inputs", () => {
   assert.equal(parseLowestInStockListing(null), null);
   assert.equal(parseLowestInStockListing(undefined), null);
   assert.equal(parseLowestInStockListing({}), null);
+});
+
+test("parseThreshold accepts non-negative numbers and rejects invalid input", () => {
+  assert.equal(parseThreshold("0.32"), 0.32);
+  assert.equal(parseThreshold("0"), 0);
+  assert.equal(parseThreshold(1.5), 1.5);
+  assert.equal(parseThreshold(""), null);
+  assert.equal(parseThreshold(null), null);
+  assert.equal(parseThreshold(undefined), null);
+  assert.equal(parseThreshold("-1"), null);
+  assert.equal(parseThreshold("abc"), null);
+});
+
+test("isQualifyingLowestPrice compares against threshold and treats missing threshold as qualifying", () => {
+  assert.equal(isQualifyingLowestPrice(0.32, 0.32), true);
+  assert.equal(isQualifyingLowestPrice(0.5, 0.32), true);
+  assert.equal(isQualifyingLowestPrice(0.1, 0.32), false);
+  assert.equal(isQualifyingLowestPrice(0.32, null), true);
+  assert.equal(isQualifyingLowestPrice(0.32, undefined), true);
 });

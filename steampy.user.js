@@ -769,6 +769,7 @@
 
   // src/lib/steampy/steampy-plus-lowest-listing-price.js
   var LOWEST_LISTING_BUTTON_ID = "steamPyPlusLowestListingPriceButton";
+  var LOWEST_LISTING_THRESHOLD_INPUT_ID = "steamPyPlusLowestListingPriceThreshold";
   var LOWEST_LISTING_PANEL_ID = "steamPyPlusLowestListingPricePanel";
   var LOWEST_LISTING_MARKER_ATTR = "data-steam-py-plus-lowest-price";
   var FILTER_ANCHOR_SELECTOR2 = ".tag.flex-row.align-items-center";
@@ -777,6 +778,15 @@
   var QUERY_CONCURRENCY = 2;
   var QUERY_INTERVAL_MIN_MS = 300;
   var QUERY_INTERVAL_MAX_MS = 600;
+  function parseThreshold(value) {
+    if (value === null || value === void 0 || String(value).trim() === "") return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? number : null;
+  }
+  function isQualifyingLowestPrice(lowestPrice, threshold) {
+    if (threshold === null || threshold === void 0) return true;
+    return Number(lowestPrice) >= Number(threshold);
+  }
   function normalizeSteamPyRegion(value) {
     const region = String(value ?? "").trim().toLowerCase();
     return SUPPORTED_REGIONS.has(region) ? region : "cn";
@@ -806,6 +816,8 @@
   function createSteamPyLowestListingPriceController({ client } = {}) {
     let vm = null;
     let button = null;
+    let thresholdInput = null;
+    let qualifyOnlyCheckbox = null;
     let panel = null;
     let querying = false;
     let queryGeneration = 0;
@@ -831,15 +843,25 @@
       panel?.remove();
       panel = null;
     }
-    function renderMarker(index, text, failed = false) {
+    function renderMarker(index, result, threshold) {
       const block = gameBlocks()[index];
       if (!block) return;
       const existing = block.querySelector(`[${LOWEST_LISTING_MARKER_ATTR}]`);
       existing?.remove();
       const marker = document.createElement("div");
       marker.setAttribute(LOWEST_LISTING_MARKER_ATTR, "true");
+      let text;
+      let color;
+      if (result.ok) {
+        const qualify = isQualifyingLowestPrice(result.lowestPrice, threshold);
+        text = qualify ? `最低挂单 ${formatPrice(result.lowestPrice)} ✓` : `最低挂单 ${formatPrice(result.lowestPrice)}（<${formatPrice(threshold) || "阈值"}）`;
+        color = qualify ? "#16a34a" : "#f59e0b";
+      } else {
+        text = result.error === "无在售挂单" ? "无在售挂单" : "查询失败";
+        color = "#f59e0b";
+      }
       marker.textContent = text;
-      marker.style.cssText = failed ? "font-size:.12rem;line-height:.16rem;color:#f59e0b;padding:0 .04rem;" : "font-size:.12rem;line-height:.16rem;color:#16a34a;padding:0 .04rem;";
+      marker.style.cssText = `font-size:.12rem;line-height:.16rem;color:${color};padding:0 .04rem;`;
       const priceContainer = block.querySelector(".gameFoot");
       (priceContainer || block).append(marker);
     }
@@ -861,9 +883,22 @@
       close.style.cssText = "min-width:.3rem;padding:0;font-size:.2rem;line-height:.3rem;cursor:pointer;";
       close.addEventListener("click", clearMarkers);
       header.append(title, close);
+      const progressRow = document.createElement("div");
+      progressRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;";
       const progress = document.createElement("div");
       progress.dataset.steamPyPlusLowestProgress = "true";
       progress.style.cssText = "font-size:.13rem;color:#666;";
+      const qualifyOnly = document.createElement("label");
+      qualifyOnly.style.cssText = "display:flex;align-items:center;gap:.05rem;font-size:.13rem;color:#17233d;cursor:pointer;";
+      const qualifyCheckbox = document.createElement("input");
+      qualifyCheckbox.type = "checkbox";
+      qualifyCheckbox.checked = true;
+      qualifyCheckbox.dataset.steamPyPlusLowestQualifyOnly = "true";
+      qualifyCheckbox.style.cssText = "margin:0;cursor:pointer;";
+      qualifyCheckbox.addEventListener("change", applyQualifyFilter);
+      qualifyOnlyCheckbox = qualifyCheckbox;
+      qualifyOnly.append(qualifyCheckbox, document.createTextNode("仅显示达标"));
+      progressRow.append(progress, qualifyOnly);
       const tableWrap = document.createElement("div");
       tableWrap.style.cssText = "flex:1;overflow:auto;";
       const table = document.createElement("table");
@@ -881,7 +916,7 @@
       const tbody = document.createElement("tbody");
       table.append(thead, tbody);
       tableWrap.append(table);
-      dialog.append(header, progress, tableWrap);
+      dialog.append(header, progressRow, tableWrap);
       overlay.append(dialog);
       overlay.addEventListener("click", (event) => {
         if (event.target === overlay) clearMarkers();
@@ -891,9 +926,11 @@
     }
     function renderProgress(completed, total) {
       const element = panel?.querySelector("[data-steam-py-plus-lowest-progress]");
-      if (element) element.textContent = `已查询 ${completed}/${total}`;
+      if (!element) return;
+      const qualifyCount = panel ? [...panel.querySelectorAll("tbody tr[data-qualify='1']")].length : 0;
+      element.textContent = `已查询 ${completed}/${total} · 达标 ${qualifyCount}`;
     }
-    function renderRow(index, game, result) {
+    function renderRow(index, game, result, threshold) {
       if (!panel) return;
       const tbody = panel.querySelector("tbody");
       let row = tbody.children[index];
@@ -902,6 +939,9 @@
         tbody.append(row);
       }
       row.replaceChildren();
+      const qualify = result.ok && isQualifyingLowestPrice(result.lowestPrice, threshold);
+      row.dataset.qualify = qualify ? "1" : "0";
+      row.style.display = qualifyOnlyCheckbox?.checked && !qualify ? "none" : "";
       const name = document.createElement("td");
       name.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;";
       name.textContent = gameNameOf(game);
@@ -911,12 +951,27 @@
       status.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;";
       if (result.ok) {
         price.textContent = formatPrice(result.lowestPrice);
-        status.textContent = result.stock > 0 ? `有 ${result.stock}` : "无库存";
+        if (qualify) {
+          status.textContent = "✓ 达标";
+          status.style.color = "#16a34a";
+        } else {
+          status.textContent = `未达标（<${formatPrice(threshold) || "阈值"}）`;
+          status.style.color = "#f59e0b";
+        }
       } else {
         price.textContent = "--";
         status.textContent = result.error || "查询失败";
+        status.style.color = "#999";
       }
       row.append(name, price, status);
+    }
+    function applyQualifyFilter() {
+      if (!panel) return;
+      const onlyQualify = qualifyOnlyCheckbox?.checked;
+      panel.querySelectorAll("tbody tr").forEach((row) => {
+        const qualify = row.dataset.qualify === "1";
+        row.style.display = onlyQualify && !qualify ? "none" : "";
+      });
     }
     async function queryGame(game, region) {
       const gameId = gameIdOf(game);
@@ -933,6 +988,7 @@
       if (querying) return;
       const games = gameList();
       const region = resolveRegion();
+      const threshold = parseThreshold(thresholdInput?.value);
       const generation = ++queryGeneration;
       const total = games.length;
       renderProgress(0, total);
@@ -964,12 +1020,8 @@
           }
           completed += 1;
           renderProgress(completed, total);
-          renderRow(index, game, result);
-          if (result.ok) {
-            renderMarker(index, `最低挂单 ${formatPrice(result.lowestPrice)}`);
-          } else {
-            renderMarker(index, result.error === "无在售挂单" ? "无在售挂单" : "查询失败", true);
-          }
+          renderRow(index, game, result, threshold);
+          renderMarker(index, result, threshold);
           if (generation !== queryGeneration) return;
           if (client?.isTokenInvalid?.()) querying = false;
           if (querying) {
@@ -982,6 +1034,7 @@
       querying = false;
       if (generation !== queryGeneration) return;
       renderProgress(total, total);
+      applyQualifyFilter();
       if (client?.isTokenInvalid?.()) {
         const element = panel?.querySelector("[data-steam-py-plus-lowest-progress]");
         if (element) element.textContent = "已停止：AccessToken 已失效，请重新登录后刷新页面";
@@ -994,10 +1047,19 @@
       runQuery();
     }
     function mountButton() {
-      if (button?.isConnected) return true;
+      if (button?.isConnected && thresholdInput?.isConnected) return true;
       const anchor = document.querySelector(FILTER_ANCHOR_SELECTOR2);
       if (!anchor) return false;
       document.getElementById(LOWEST_LISTING_BUTTON_ID)?.remove();
+      document.getElementById(LOWEST_LISTING_THRESHOLD_INPUT_ID)?.remove();
+      thresholdInput = document.createElement("input");
+      thresholdInput.id = LOWEST_LISTING_THRESHOLD_INPUT_ID;
+      thresholdInput.type = "number";
+      thresholdInput.min = "0";
+      thresholdInput.step = "0.01";
+      thresholdInput.placeholder = "最低价≥";
+      thresholdInput.title = "只关注最低有库存挂单价达到该金额的游戏";
+      thresholdInput.style.cssText = "width:.9rem;height:.28rem;margin-left:.08rem;padding:0 .06rem;border:1px solid #dcdee2;border-radius:.04rem;font-size:.13rem;color:#17233d;box-sizing:border-box;vertical-align:middle;";
       button = document.createElement("button");
       button.id = LOWEST_LISTING_BUTTON_ID;
       button.type = "button";
@@ -1005,7 +1067,7 @@
       button.textContent = "查询最低挂单价";
       button.style.cssText = "margin-left:.08rem;";
       button.addEventListener("click", startQuery);
-      anchor.append(button);
+      anchor.append(thresholdInput, button);
       return true;
     }
     function start(nextVm) {
@@ -1020,6 +1082,9 @@
       clearMarkers();
       button?.remove();
       button = null;
+      thresholdInput?.remove();
+      thresholdInput = null;
+      qualifyOnlyCheckbox = null;
       vm = null;
     }
     return { cleanup, clearMarkers, start };
