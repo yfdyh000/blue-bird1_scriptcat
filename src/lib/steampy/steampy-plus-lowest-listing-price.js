@@ -12,6 +12,13 @@ const SUPPORTED_REGIONS = new Set(["cn", "ru", "us", "tl"]);
 const QUERY_CONCURRENCY = 2;
 const QUERY_INTERVAL_MIN_MS = 300;
 const QUERY_INTERVAL_MAX_MS = 600;
+const EXTRA_PAGES = 3;
+
+export function isAllBelowThreshold(games, threshold) {
+  if (threshold === null || threshold === undefined) return false;
+  if (!Array.isArray(games) || games.length === 0) return false;
+  return games.every((game) => Number(game?.keyPrice) < Number(threshold));
+}
 
 export function normalizeSteamPyRegion(value) {
   const region = String(value ?? "").trim().toLowerCase();
@@ -292,16 +299,36 @@ export function createSteamPyLowestListingPriceController({
     const threshold = parseThreshold(thresholdInput?.value);
     const maxOutOfPocket = parseThreshold(maxOutOfPocketInput?.value);
     const maxPrice = maxOutOfPocket === null ? Infinity : (threshold ?? 0) + maxOutOfPocket;
-    const games = gameList();
     const region = resolveRegion();
     const generation = ++queryGeneration;
-    const total = games.length;
-    renderProgress(0, total);
+    const firstPageGames = gameList();
+    const firstPageCount = firstPageGames.length;
+    renderProgress(0, firstPageCount);
     if (threshold === null) {
       const element = panel?.querySelector("[data-steam-py-plus-lowest-progress]");
       if (element) element.textContent = "请先输入满减门槛金额";
       return;
     }
+    let games = firstPageGames;
+    if (!isAllBelowThreshold(firstPageGames, threshold) && client?.fetchSteamGameKeyHot) {
+      const searchForm = vm?.searchForm || {};
+      const pageSize = Number(searchForm.pageSize) || firstPageCount || 30;
+      const collected = [...firstPageGames];
+      for (let pageNumber = 2; pageNumber <= 1 + EXTRA_PAGES; pageNumber += 1) {
+        try {
+          const pageResponse = await client.fetchSteamGameKeyHot({ ...searchForm, pageNumber, pageSize });
+          const pageGames = pageResponse?.content ?? pageResponse?.result?.content ?? [];
+          if (!Array.isArray(pageGames) || pageGames.length === 0) break;
+          collected.push(...pageGames);
+        } catch {
+          break;
+        }
+        await waitFor(QUERY_INTERVAL_MIN_MS);
+      }
+      games = collected;
+    }
+    const total = games.length;
+    renderProgress(0, total);
     if (!total) return;
     querying = true;
     const tbody = panel?.querySelector("tbody");
@@ -332,7 +359,7 @@ export function createSteamPyLowestListingPriceController({
         completed += 1;
         renderProgress(completed, total);
         renderRow(index, game, result);
-        renderMarker(index, result);
+        if (index < firstPageCount) renderMarker(index, result);
         if (generation !== queryGeneration) return;
         if (client?.isTokenInvalid?.()) querying = false;
         if (querying) {

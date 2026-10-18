@@ -198,6 +198,10 @@ export function createSteampyXbootClient(options = {}) {
     return requestJson(buildSearchUrl("/xboot/steamApp/list", params));
   }
 
+  async function fetchSteamGameKeyHot(params) {
+    return requestJson(buildSearchUrl("/xboot/steamGame/keyHot", params));
+  }
+
   async function fetchSteamGameByAppId(appId) {
     return requestJson(buildSearchUrl("/xboot/steamGame/searchByAppId", { appId }));
   }
@@ -249,6 +253,7 @@ export function createSteampyXbootClient(options = {}) {
     fetchSaleKeyByName,
     fetchKeySaleList,
     fetchSteamAppList,
+    fetchSteamGameKeyHot,
     fetchSteamGameByAppId,
     startKeySale,
     requestJson,

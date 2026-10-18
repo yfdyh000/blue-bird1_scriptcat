@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  isAllBelowThreshold,
   isPriceInRange,
   normalizeSteamPyRegion,
   parseInRangeListing,
@@ -141,4 +142,18 @@ test("parseInRangeListing handles empty and invalid inputs", () => {
   assert.equal(parseInRangeListing([], 0.32, 0.62), null);
   assert.equal(parseInRangeListing(null, 0.32, 0.62), null);
   assert.equal(parseInRangeListing({}, 0.32, 0.62), null);
+});
+
+test("isAllBelowThreshold detects a page full of ultra-low page prices", () => {
+  const games = [
+    { keyPrice: 0.1 },
+    { keyPrice: 0.1 },
+    { keyPrice: 0.1 },
+  ];
+  assert.equal(isAllBelowThreshold(games, 0.32), true);
+  assert.equal(isAllBelowThreshold([{ keyPrice: 0.1 }, { keyPrice: 0.4 }], 0.32), false);
+  assert.equal(isAllBelowThreshold([], 0.32), false);
+  assert.equal(isAllBelowThreshold(null, 0.32), false);
+  assert.equal(isAllBelowThreshold(games, null), false);
+  assert.equal(isAllBelowThreshold(games, undefined), false);
 });
