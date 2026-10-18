@@ -242,7 +242,19 @@ export function createSteamPyLowestListingPriceController({
       status.style.color = "#999";
     } else {
       price.textContent = "--";
-      status.textContent = result.error || "查询失败";
+      const lowest = result.lowestPrice !== null && result.lowestPrice !== undefined
+        ? formatPrice(result.lowestPrice)
+        : null;
+      const qualifying = result.lowestQualifyingPrice !== null && result.lowestQualifyingPrice !== undefined
+        ? formatPrice(result.lowestQualifyingPrice)
+        : null;
+      if (lowest && qualifying) {
+        status.textContent = `${result.error} · 最低 ${lowest} · 门槛价 ${qualifying}`;
+      } else if (lowest) {
+        status.textContent = `${result.error} · 最低 ${lowest}`;
+      } else {
+        status.textContent = result.error || "查询失败";
+      }
       status.style.color = "#f59e0b";
     }
     row.append(name, price, status);
@@ -273,9 +285,19 @@ export function createSteamPyLowestListingPriceController({
     }
     const response = await client.fetchKeySaleList({ region, gameId });
     const content = response?.content ?? response?.result?.content ?? response?.result ?? response;
-    const found = parseInRangeListing(Array.isArray(content) ? content : [], threshold, maxPrice);
-    if (!found) return { ok: false, error: "无达标挂单" };
-    return { ok: true, price: found.price, stock: found.stock, source: "listSale" };
+    const listings = Array.isArray(content) ? content : [];
+    const found = parseInRangeListing(listings, threshold, maxPrice);
+    if (found) {
+      return { ok: true, price: found.price, stock: found.stock, source: "listSale" };
+    }
+    const lowest = parseLowestInStockListing(listings);
+    const qualifying = parseInRangeListing(listings, threshold, Infinity);
+    return {
+      ok: false,
+      error: "无达标挂单",
+      lowestPrice: lowest?.lowestPrice ?? null,
+      lowestQualifyingPrice: qualifying?.price ?? null,
+    };
   }
 
   async function runQuery() {

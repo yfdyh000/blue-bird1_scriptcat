@@ -805,6 +805,17 @@
     const found = content.filter((item) => Number(item?.stock ?? 1) > 0).map((item) => ({ price: Number(item?.keyPrice), stock: Number(item?.stock ?? 1) })).filter((item) => Number.isFinite(item.price) && isPriceInRange(item.price, threshold, maxPrice)).sort((first, second) => first.price - second.price);
     return found[0] || null;
   }
+  function parseLowestInStockListing(content) {
+    if (!Array.isArray(content)) return null;
+    const available = content.filter((item) => Number(item?.keyPrice) > 0 && Number(item?.stock ?? 1) > 0).sort((first, second) => Number(first.keyPrice) - Number(second.keyPrice));
+    const lowest = available[0];
+    if (!lowest) return null;
+    return {
+      lowestPrice: Number(lowest.keyPrice),
+      stock: Number(lowest.stock ?? 1),
+      sold: Number(lowest.sold ?? 0)
+    };
+  }
   function formatPrice(value) {
     const number = Number(value);
     return Number.isFinite(number) ? `￥${number.toFixed(2)}` : "--";
@@ -972,7 +983,15 @@
         status.style.color = "#999";
       } else {
         price.textContent = "--";
-        status.textContent = result.error || "查询失败";
+        const lowest = result.lowestPrice !== null && result.lowestPrice !== void 0 ? formatPrice(result.lowestPrice) : null;
+        const qualifying = result.lowestQualifyingPrice !== null && result.lowestQualifyingPrice !== void 0 ? formatPrice(result.lowestQualifyingPrice) : null;
+        if (lowest && qualifying) {
+          status.textContent = `${result.error} · 最低 ${lowest} · 门槛价 ${qualifying}`;
+        } else if (lowest) {
+          status.textContent = `${result.error} · 最低 ${lowest}`;
+        } else {
+          status.textContent = result.error || "查询失败";
+        }
         status.style.color = "#f59e0b";
       }
       row.append(name, price, status);
@@ -996,9 +1015,19 @@
       }
       const response = await client.fetchKeySaleList({ region, gameId });
       const content = response?.content ?? response?.result?.content ?? response?.result ?? response;
-      const found = parseInRangeListing(Array.isArray(content) ? content : [], threshold, maxPrice);
-      if (!found) return { ok: false, error: "无达标挂单" };
-      return { ok: true, price: found.price, stock: found.stock, source: "listSale" };
+      const listings = Array.isArray(content) ? content : [];
+      const found = parseInRangeListing(listings, threshold, maxPrice);
+      if (found) {
+        return { ok: true, price: found.price, stock: found.stock, source: "listSale" };
+      }
+      const lowest = parseLowestInStockListing(listings);
+      const qualifying = parseInRangeListing(listings, threshold, Infinity);
+      return {
+        ok: false,
+        error: "无达标挂单",
+        lowestPrice: lowest?.lowestPrice ?? null,
+        lowestQualifyingPrice: qualifying?.price ?? null
+      };
     }
     async function runQuery() {
       if (querying) return;
