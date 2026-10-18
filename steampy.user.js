@@ -22,8 +22,6 @@
 // @connect         api.steampowered.com
 // @run-at          document-start
 // @license         MIT
-// @downloadURL     https://update.greasyfork.org/scripts/549676/SteamPy%20Plus.user.js
-// @updateURL       https://update.greasyfork.org/scripts/549676/SteamPy%20Plus.meta.js
 // ==/UserScript==
 
 /* global ajax, ajaxHooker, elmGetter, $, BigInt */
