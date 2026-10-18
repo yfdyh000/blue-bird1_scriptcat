@@ -90,6 +90,12 @@ test("isPriceInRange checks both ends of the coupon range", () => {
   assert.equal(isPriceInRange(0.63, 0.32, 0.62), false);
 });
 
+test("isPriceInRange treats an open-ended max as qualifying", () => {
+  assert.equal(isPriceInRange(0.32, 0.32, Infinity), true);
+  assert.equal(isPriceInRange(1.5, 0.32, Infinity), true);
+  assert.equal(isPriceInRange(0.1, 0.32, Infinity), false);
+});
+
 test("parseInRangeListing returns the cheapest in-stock listing inside the range", () => {
   const result = parseInRangeListing([
     { keyPrice: "0.10", stock: 9 },
@@ -120,6 +126,15 @@ test("parseInRangeListing returns null when no listing falls inside the range", 
     { keyPrice: "1.00", stock: 2 },
   ], 0.32, 0.62);
   assert.equal(above, null);
+});
+
+test("parseInRangeListing with an open-ended max returns the cheapest qualifying listing", () => {
+  const result = parseInRangeListing([
+    { keyPrice: "0.10", stock: 9 },
+    { keyPrice: "0.45", stock: 2 },
+    { keyPrice: "1.00", stock: 1 },
+  ], 0.32, Infinity);
+  assert.deepEqual(result, { price: 0.45, stock: 2 });
 });
 
 test("parseInRangeListing handles empty and invalid inputs", () => {

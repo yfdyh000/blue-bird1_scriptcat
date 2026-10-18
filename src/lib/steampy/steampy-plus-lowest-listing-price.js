@@ -1,6 +1,8 @@
 const LOWEST_LISTING_BUTTON_ID = "steamPyPlusLowestListingPriceButton";
 const LOWEST_LISTING_THRESHOLD_INPUT_ID = "steamPyPlusLowestListingPriceThreshold";
 const LOWEST_LISTING_MAX_OUT_OF_POCKET_INPUT_ID = "steamPyPlusLowestListingPriceMaxOutOfPocket";
+const LOWEST_LISTING_THRESHOLD_STORAGE_KEY = "steamPyPlusLowestListingThreshold";
+const LOWEST_LISTING_MAX_OUT_OF_POCKET_STORAGE_KEY = "steamPyPlusLowestListingMaxOutOfPocket";
 const LOWEST_LISTING_PANEL_ID = "steamPyPlusLowestListingPricePanel";
 const LOWEST_LISTING_MARKER_ATTR = "data-steam-py-plus-lowest-price";
 const FILTER_ANCHOR_SELECTOR = ".tag.flex-row.align-items-center";
@@ -63,7 +65,11 @@ function waitFor(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-export function createSteamPyLowestListingPriceController({ client } = {}) {
+export function createSteamPyLowestListingPriceController({
+  client,
+  getValue = GM_getValue,
+  setValue = GM_setValue,
+} = {}) {
   let vm = null;
   let button = null;
   let thresholdInput = null;
@@ -199,7 +205,7 @@ export function createSteamPyLowestListingPriceController({ client } = {}) {
     const qualifyCount = panel
       ? [...panel.querySelectorAll("tbody tr[data-qualify='1']")].length
       : 0;
-    element.textContent = `已查询 ${completed}/${total} · 可用 ${qualifyCount}`;
+    element.textContent = `已处理 ${completed}/${total} · 可用 ${qualifyCount}`;
   }
 
   function renderRow(index, game, result) {
@@ -252,26 +258,26 @@ export function createSteamPyLowestListingPriceController({ client } = {}) {
       return { ok: false, error: "缺少 gameId" };
     }
     const pagePrice = pagePriceOf(game);
-    if (pagePrice !== null && Number.isFinite(Number(pagePrice))) {
-      if (Number(pagePrice) > maxPrice) {
-        return { ok: false, skip: true, error: "页面价过高" };
-      }
-      if (isPriceInRange(Number(pagePrice), threshold, maxPrice)) {
-        return { ok: true, price: Number(pagePrice), source: "page" };
-      }
+    if (
+      maxPrice !== Infinity
+      && pagePrice !== null
+      && Number.isFinite(Number(pagePrice))
+      && Number(pagePrice) > maxPrice
+    ) {
+      return { ok: false, skip: true, error: "页面价过高" };
     }
     const response = await client.fetchKeySaleList({ region, gameId });
     const content = response?.content ?? response?.result?.content ?? response?.result ?? response;
     const found = parseInRangeListing(Array.isArray(content) ? content : [], threshold, maxPrice);
-    if (!found) return { ok: false, error: "无区间挂单" };
+    if (!found) return { ok: false, error: "无达标挂单" };
     return { ok: true, price: found.price, stock: found.stock, source: "listSale" };
   }
 
   async function runQuery() {
     if (querying) return;
     const threshold = parseThreshold(thresholdInput?.value);
-    const maxOutOfPocket = parseThreshold(maxOutOfPocketInput?.value) ?? 0;
-    const maxPrice = (threshold ?? 0) + maxOutOfPocket;
+    const maxOutOfPocket = parseThreshold(maxOutOfPocketInput?.value);
+    const maxPrice = maxOutOfPocket === null ? Infinity : (threshold ?? 0) + maxOutOfPocket;
     const games = gameList();
     const region = resolveRegion();
     const generation = ++queryGeneration;
@@ -334,8 +340,21 @@ export function createSteamPyLowestListingPriceController({ client } = {}) {
     }
   }
 
+  function persistInputs() {
+    setValue?.(LOWEST_LISTING_THRESHOLD_STORAGE_KEY, thresholdInput?.value ?? "");
+    setValue?.(LOWEST_LISTING_MAX_OUT_OF_POCKET_STORAGE_KEY, maxOutOfPocketInput?.value ?? "");
+  }
+
+  function restoreInputs() {
+    const threshold = getValue?.(LOWEST_LISTING_THRESHOLD_STORAGE_KEY, "");
+    const maxOutOfPocket = getValue?.(LOWEST_LISTING_MAX_OUT_OF_POCKET_STORAGE_KEY, "");
+    if (thresholdInput) thresholdInput.value = String(threshold ?? "");
+    if (maxOutOfPocketInput) maxOutOfPocketInput.value = String(maxOutOfPocket ?? "");
+  }
+
   function startQuery() {
     if (querying) return;
+    persistInputs();
     clearMarkers();
     panel = createPanel();
     runQuery();
@@ -368,10 +387,12 @@ export function createSteamPyLowestListingPriceController({ client } = {}) {
     button.id = LOWEST_LISTING_BUTTON_ID;
     button.type = "button";
     button.className = "ivu-btn ivu-btn-default ivu-btn-sm";
-    button.textContent = "查询满减可用";
+    button.textContent = "查看低价";
+    button.title = "查看本页游戏是否有符合条件的有库存挂单：挂单价需不低于“满减门槛”，且不超过“门槛+自付上限”（自付可留空表示不设上限）。结果标注在卡片上并以面板列出。";
     button.style.cssText = "margin-left:.08rem;";
     button.addEventListener("click", startQuery);
     anchor.append(thresholdInput, maxOutOfPocketInput, button);
+    restoreInputs();
     return true;
   }
 

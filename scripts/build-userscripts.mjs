@@ -115,9 +115,22 @@ if (entries.length === 0) {
   process.exit(0);
 }
 
+const requestedTargets = process.argv
+  .slice(2)
+  .map((arg) => (arg.endsWith(".user.js") ? arg : `${arg}.user.js`))
+  .map((arg) => basename(arg));
+const selectedEntries = requestedTargets.length
+  ? entries.filter((entry) => requestedTargets.includes(basename(entry)))
+  : entries;
+
+if (selectedEntries.length === 0) {
+  log(`no *.user.js entry matches: ${requestedTargets.join(", ")}`);
+  process.exit(0);
+}
+
 rmSync(tmpDir, { recursive: true, force: true });
 mkdirSync(tmpDir, { recursive: true });
 
-for (const entry of entries) {
+for (const entry of selectedEntries) {
   await buildEntry(entry);
 }
