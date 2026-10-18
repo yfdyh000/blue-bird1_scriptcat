@@ -1445,7 +1445,7 @@
       .gameRating.negative { background: #FF9800 !important; }
       .gameRating.very-negative { background: #F44336 !important; }
       .gameblock { position: relative !important; }
-      .gameblock .${STEAM_OPEN_BUTTON_CLASS} { position: absolute !important; right: .04rem !important; bottom: .04rem !important; z-index: 20 !important; padding: 0 .08rem !important; height: .22rem !important; line-height: .22rem !important; font-size: .11rem !important; border: none !important; border-radius: .04rem !important; background: #1a9fff !important; color: #fff !important; cursor: pointer !important; box-shadow: 0 1px 2px rgba(0,0,0,.3) !important; }
+      .gameblock .${STEAM_OPEN_BUTTON_CLASS} { position: absolute !important; right: .04rem !important; top: .34rem !important; z-index: 20 !important; padding: 0 .05rem !important; height: .18rem !important; line-height: .18rem !important; font-size: .1rem !important; border: none !important; border-radius: .04rem !important; background: rgba(26, 159, 255, .85) !important; color: #fff !important; cursor: pointer !important; box-shadow: 0 1px 2px rgba(0,0,0,.3) !important; }
       .gameblock .${STEAM_OPEN_BUTTON_CLASS}:hover { background: #0e86e8 !important; }
     `;
       document.head.appendChild(style);
