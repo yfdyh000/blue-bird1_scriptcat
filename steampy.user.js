@@ -618,7 +618,12 @@
     let proStartGeneration = 0;
     let proPageSize = DEFAULT_PRO_BUYER_PAGE_SIZE;
     function processCards(vm) {
-      rating.processCards(vm?.$el?.querySelectorAll(".gameblock") ?? [], vm?.gameList, vm?.__steamPyPlusOriginalGameList);
+      rating.processCards(
+        vm?.$el?.querySelectorAll(".gameblock") ?? [],
+        vm?.gameList,
+        vm?.__steamPyPlusOriginalGameList,
+        vm?.areas
+      );
     }
     function applyLegacy() {
       if (!legacyVm) legacyVm = jQuery(".game_layout .game_layout").get(0)?.__vue__ || null;
@@ -1270,6 +1275,7 @@
     "negative",
     "very-negative"
   ];
+  var STEAM_OPEN_BUTTON_CLASS = "steamPyPlusSteamOpenButton";
   function normalizeAppId(appId) {
     const parsed = Number.parseInt(appId, 10);
     return Number.isNaN(parsed) ? null : parsed;
@@ -1336,28 +1342,60 @@
       newRatingElement.textContent = text;
       gameHead.appendChild(newRatingElement);
     }
-    function processOpen(gameBlock, gameSource) {
+    function getGameId(gameSource) {
+      return typeof gameSource === "object" ? gameSource?.id ?? gameSource?.gameId ?? null : null;
+    }
+    function addSteamOpenButton(gameBlock, getUrl) {
+      if (gameBlock.dataset.steamPyPlusButtonBound) return;
+      gameBlock.dataset.steamPyPlusButtonBound = "true";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = STEAM_OPEN_BUTTON_CLASS;
+      button.textContent = "Steam";
+      button.title = "打开 Steam 商店页面";
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const url = getUrl();
+        if (url) window.open(url, "_blank");
+      });
+      button.addEventListener("mousedown", (event) => {
+        if (event.button === 1) event.preventDefault();
+      });
+      gameBlock.style.position = "relative";
+      gameBlock.appendChild(button);
+    }
+    function processOpen(gameBlock, gameSource, region) {
       const appId = getSteamAppId(gameBlock, gameSource);
+      const gameId = getGameId(gameSource);
       if (appId) {
         cardAppIds.set(gameBlock, appId);
       } else {
         cardAppIds.delete(gameBlock);
       }
+      addSteamOpenButton(gameBlock, () => {
+        const currentAppId = cardAppIds.get(gameBlock);
+        return currentAppId ? `https://store.steampowered.com/app/${currentAppId}/` : null;
+      });
       if (gameBlock.dataset.steamPyPlusOpenBound) return;
       gameBlock.dataset.steamPyPlusOpenBound = "true";
       gameBlock.addEventListener("mousedown", (event) => {
         if (event.button !== 1 || event.ctrlKey || event.shiftKey) return;
+        if (gameId) {
+          event.preventDefault();
+          window.open(`https://steampy.com/cdkDetail?name=${region}&gameId=${gameId}`, "_blank");
+          return;
+        }
         const currentAppId = cardAppIds.get(gameBlock);
         if (!currentAppId) return;
         event.preventDefault();
         window.open(`https://store.steampowered.com/app/${currentAppId}/`, "_blank");
       });
     }
-    function processCards(gameBlocks, games, extraGames) {
+    function processCards(gameBlocks, games, extraGames, region = "cn") {
       gameBlocks.forEach((gameBlock, index) => {
         const game = games?.[index];
         updateCard(gameBlock, game, extraGames);
-        processOpen(gameBlock, game);
+        processOpen(gameBlock, game, region);
       });
     }
     function injectStyle() {
@@ -1372,6 +1410,9 @@
       .gameRating.mixed { background: #FFC107 !important; color: #333 !important; }
       .gameRating.negative { background: #FF9800 !important; }
       .gameRating.very-negative { background: #F44336 !important; }
+      .gameblock { position: relative !important; }
+      .gameblock .${STEAM_OPEN_BUTTON_CLASS} { position: absolute !important; right: .04rem !important; bottom: .04rem !important; z-index: 20 !important; padding: 0 .08rem !important; height: .22rem !important; line-height: .22rem !important; font-size: .11rem !important; border: none !important; border-radius: .04rem !important; background: #1a9fff !important; color: #fff !important; cursor: pointer !important; box-shadow: 0 1px 2px rgba(0,0,0,.3) !important; }
+      .gameblock .${STEAM_OPEN_BUTTON_CLASS}:hover { background: #0e86e8 !important; }
     `;
       document.head.appendChild(style);
     }
