@@ -770,6 +770,7 @@
   // src/lib/steampy/steampy-plus-lowest-listing-price.js
   var LOWEST_LISTING_BUTTON_ID = "steamPyPlusLowestListingPriceButton";
   var LOWEST_LISTING_THRESHOLD_INPUT_ID = "steamPyPlusLowestListingPriceThreshold";
+  var LOWEST_LISTING_MAX_OUT_OF_POCKET_INPUT_ID = "steamPyPlusLowestListingPriceMaxOutOfPocket";
   var LOWEST_LISTING_PANEL_ID = "steamPyPlusLowestListingPricePanel";
   var LOWEST_LISTING_MARKER_ATTR = "data-steam-py-plus-lowest-price";
   var FILTER_ANCHOR_SELECTOR2 = ".tag.flex-row.align-items-center";
@@ -778,33 +779,23 @@
   var QUERY_CONCURRENCY = 2;
   var QUERY_INTERVAL_MIN_MS = 300;
   var QUERY_INTERVAL_MAX_MS = 600;
+  function normalizeSteamPyRegion(value) {
+    const region = String(value ?? "").trim().toLowerCase();
+    return SUPPORTED_REGIONS.has(region) ? region : "cn";
+  }
   function parseThreshold(value) {
     if (value === null || value === void 0 || String(value).trim() === "") return null;
     const number = Number(value);
     return Number.isFinite(number) && number >= 0 ? number : null;
   }
-  function isQualifyingLowestPrice(lowestPrice, threshold) {
-    if (threshold === null || threshold === void 0) return true;
-    return Number(lowestPrice) >= Number(threshold);
+  function isPriceInRange(price, threshold, maxPrice) {
+    const number = Number(price);
+    return Number.isFinite(number) && number >= Number(threshold) && number <= Number(maxPrice);
   }
-  function normalizeSteamPyRegion(value) {
-    const region = String(value ?? "").trim().toLowerCase();
-    return SUPPORTED_REGIONS.has(region) ? region : "cn";
-  }
-  function positivePrice(value) {
-    const number = Number(value);
-    return Number.isFinite(number) && number > 0 ? number : null;
-  }
-  function parseLowestInStockListing(content) {
+  function parseInRangeListing(content, threshold, maxPrice) {
     if (!Array.isArray(content)) return null;
-    const available = content.filter((item) => positivePrice(item?.keyPrice) !== null && Number(item?.stock ?? 1) > 0).sort((first, second) => Number(first.keyPrice) - Number(second.keyPrice));
-    const lowest = available[0];
-    if (!lowest) return null;
-    return {
-      lowestPrice: Number(lowest.keyPrice),
-      stock: Number(lowest.stock ?? 1),
-      sold: Number(lowest.sold ?? 0)
-    };
+    const found = content.filter((item) => Number(item?.stock ?? 1) > 0).map((item) => ({ price: Number(item?.keyPrice), stock: Number(item?.stock ?? 1) })).filter((item) => Number.isFinite(item.price) && isPriceInRange(item.price, threshold, maxPrice)).sort((first, second) => first.price - second.price);
+    return found[0] || null;
   }
   function formatPrice(value) {
     const number = Number(value);
@@ -817,6 +808,7 @@
     let vm = null;
     let button = null;
     let thresholdInput = null;
+    let maxOutOfPocketInput = null;
     let qualifyOnlyCheckbox = null;
     let panel = null;
     let querying = false;
@@ -833,6 +825,9 @@
     function gameNameOf(game) {
       return game?.gameName || game?.name || `gameId ${gameIdOf(game) ?? "未知"}`;
     }
+    function pagePriceOf(game) {
+      return game?.keyPrice ?? game?.miniPrice ?? null;
+    }
     function resolveRegion() {
       return normalizeSteamPyRegion(vm?.areas);
     }
@@ -843,7 +838,7 @@
       panel?.remove();
       panel = null;
     }
-    function renderMarker(index, result, threshold) {
+    function renderMarker(index, result) {
       const block = gameBlocks()[index];
       if (!block) return;
       const existing = block.querySelector(`[${LOWEST_LISTING_MARKER_ATTR}]`);
@@ -853,11 +848,13 @@
       let text;
       let color;
       if (result.ok) {
-        const qualify = isQualifyingLowestPrice(result.lowestPrice, threshold);
-        text = qualify ? `最低挂单 ${formatPrice(result.lowestPrice)} ✓` : `最低挂单 ${formatPrice(result.lowestPrice)}（<${formatPrice(threshold) || "阈值"}）`;
-        color = qualify ? "#16a34a" : "#f59e0b";
+        text = `✓ 可用 ${formatPrice(result.price)}`;
+        color = "#16a34a";
+      } else if (result.skip) {
+        text = "页面价过高";
+        color = "#999";
       } else {
-        text = result.error === "无在售挂单" ? "无在售挂单" : "查询失败";
+        text = result.error || "查询失败";
         color = "#f59e0b";
       }
       marker.textContent = text;
@@ -875,7 +872,7 @@
       header.style.cssText = "display:flex;align-items:center;justify-content:space-between;";
       const title = document.createElement("h3");
       title.style.cssText = "margin:0;font-size:.18rem;";
-      title.textContent = "最低有库存挂单价";
+      title.textContent = "满减可用挂单";
       const close = document.createElement("button");
       close.type = "button";
       close.className = "ivu-btn ivu-btn-default ivu-btn-sm";
@@ -897,7 +894,7 @@
       qualifyCheckbox.style.cssText = "margin:0;cursor:pointer;";
       qualifyCheckbox.addEventListener("change", applyQualifyFilter);
       qualifyOnlyCheckbox = qualifyCheckbox;
-      qualifyOnly.append(qualifyCheckbox, document.createTextNode("仅显示达标"));
+      qualifyOnly.append(qualifyCheckbox, document.createTextNode("仅显示可用"));
       progressRow.append(progress, qualifyOnly);
       const tableWrap = document.createElement("div");
       tableWrap.style.cssText = "flex:1;overflow:auto;";
@@ -906,7 +903,7 @@
       const thead = document.createElement("thead");
       const headRow = document.createElement("tr");
       headRow.style.cssText = "background:#f5f7fa;";
-      [["游戏", "1"], ["最低挂单价", "0.8"], ["状态", "1"]].forEach(([text]) => {
+      [["游戏", "1"], ["可用挂单价", "0.9"], ["状态", "1"]].forEach(([text]) => {
         const th = document.createElement("th");
         th.textContent = text;
         th.style.cssText = "padding:.08rem .1rem;border:1px solid #e8eaec;text-align:left;";
@@ -928,9 +925,9 @@
       const element = panel?.querySelector("[data-steam-py-plus-lowest-progress]");
       if (!element) return;
       const qualifyCount = panel ? [...panel.querySelectorAll("tbody tr[data-qualify='1']")].length : 0;
-      element.textContent = `已查询 ${completed}/${total} · 达标 ${qualifyCount}`;
+      element.textContent = `已查询 ${completed}/${total} · 可用 ${qualifyCount}`;
     }
-    function renderRow(index, game, result, threshold) {
+    function renderRow(index, game, result) {
       if (!panel) return;
       const tbody = panel.querySelector("tbody");
       let row = tbody.children[index];
@@ -939,7 +936,7 @@
         tbody.append(row);
       }
       row.replaceChildren();
-      const qualify = result.ok && isQualifyingLowestPrice(result.lowestPrice, threshold);
+      const qualify = result.ok;
       row.dataset.qualify = qualify ? "1" : "0";
       row.style.display = qualifyOnlyCheckbox?.checked && !qualify ? "none" : "";
       const name = document.createElement("td");
@@ -950,18 +947,17 @@
       const status = document.createElement("td");
       status.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;";
       if (result.ok) {
-        price.textContent = formatPrice(result.lowestPrice);
-        if (qualify) {
-          status.textContent = "✓ 达标";
-          status.style.color = "#16a34a";
-        } else {
-          status.textContent = `未达标（<${formatPrice(threshold) || "阈值"}）`;
-          status.style.color = "#f59e0b";
-        }
+        price.textContent = formatPrice(result.price);
+        status.textContent = "✓ 可用";
+        status.style.color = "#16a34a";
+      } else if (result.skip) {
+        price.textContent = "--";
+        status.textContent = "页面价过高";
+        status.style.color = "#999";
       } else {
         price.textContent = "--";
         status.textContent = result.error || "查询失败";
-        status.style.color = "#999";
+        status.style.color = "#f59e0b";
       }
       row.append(name, price, status);
     }
@@ -973,25 +969,41 @@
         row.style.display = onlyQualify && !qualify ? "none" : "";
       });
     }
-    async function queryGame(game, region) {
+    async function queryGame(game, region, threshold, maxPrice) {
       const gameId = gameIdOf(game);
       if (gameId === null || gameId === void 0 || gameId === "") {
         return { ok: false, error: "缺少 gameId" };
       }
+      const pagePrice = pagePriceOf(game);
+      if (pagePrice !== null && Number.isFinite(Number(pagePrice))) {
+        if (Number(pagePrice) > maxPrice) {
+          return { ok: false, skip: true, error: "页面价过高" };
+        }
+        if (isPriceInRange(Number(pagePrice), threshold, maxPrice)) {
+          return { ok: true, price: Number(pagePrice), source: "page" };
+        }
+      }
       const response = await client.fetchKeySaleList({ region, gameId });
       const content = response?.content ?? response?.result?.content ?? response?.result ?? response;
-      const parsed = parseLowestInStockListing(Array.isArray(content) ? content : []);
-      if (!parsed) return { ok: false, error: "无在售挂单" };
-      return { ok: true, ...parsed };
+      const found = parseInRangeListing(Array.isArray(content) ? content : [], threshold, maxPrice);
+      if (!found) return { ok: false, error: "无区间挂单" };
+      return { ok: true, price: found.price, stock: found.stock, source: "listSale" };
     }
     async function runQuery() {
       if (querying) return;
+      const threshold = parseThreshold(thresholdInput?.value);
+      const maxOutOfPocket = parseThreshold(maxOutOfPocketInput?.value) ?? 0;
+      const maxPrice = (threshold ?? 0) + maxOutOfPocket;
       const games = gameList();
       const region = resolveRegion();
-      const threshold = parseThreshold(thresholdInput?.value);
       const generation = ++queryGeneration;
       const total = games.length;
       renderProgress(0, total);
+      if (threshold === null) {
+        const element = panel?.querySelector("[data-steam-py-plus-lowest-progress]");
+        if (element) element.textContent = "请先输入满减门槛金额";
+        return;
+      }
       if (!total) return;
       querying = true;
       const tbody = panel?.querySelector("tbody");
@@ -1013,15 +1025,15 @@
             querying = false;
           } else {
             try {
-              result = await queryGame(game, region);
+              result = await queryGame(game, region, threshold, maxPrice);
             } catch (error) {
               result = { ok: false, error: error?.message || String(error) };
             }
           }
           completed += 1;
           renderProgress(completed, total);
-          renderRow(index, game, result, threshold);
-          renderMarker(index, result, threshold);
+          renderRow(index, game, result);
+          renderMarker(index, result);
           if (generation !== queryGeneration) return;
           if (client?.isTokenInvalid?.()) querying = false;
           if (querying) {
@@ -1047,27 +1059,36 @@
       runQuery();
     }
     function mountButton() {
-      if (button?.isConnected && thresholdInput?.isConnected) return true;
+      if (button?.isConnected && thresholdInput?.isConnected && maxOutOfPocketInput?.isConnected) return true;
       const anchor = document.querySelector(FILTER_ANCHOR_SELECTOR2);
       if (!anchor) return false;
       document.getElementById(LOWEST_LISTING_BUTTON_ID)?.remove();
       document.getElementById(LOWEST_LISTING_THRESHOLD_INPUT_ID)?.remove();
+      document.getElementById(LOWEST_LISTING_MAX_OUT_OF_POCKET_INPUT_ID)?.remove();
       thresholdInput = document.createElement("input");
       thresholdInput.id = LOWEST_LISTING_THRESHOLD_INPUT_ID;
       thresholdInput.type = "number";
       thresholdInput.min = "0";
       thresholdInput.step = "0.01";
-      thresholdInput.placeholder = "最低价≥";
-      thresholdInput.title = "只关注最低有库存挂单价达到该金额的游戏";
+      thresholdInput.placeholder = "满减门槛";
+      thresholdInput.title = "挂单价格需达到该金额才能使用满减券";
       thresholdInput.style.cssText = "width:.9rem;height:.28rem;margin-left:.08rem;padding:0 .06rem;border:1px solid #dcdee2;border-radius:.04rem;font-size:.13rem;color:#17233d;box-sizing:border-box;vertical-align:middle;";
+      maxOutOfPocketInput = document.createElement("input");
+      maxOutOfPocketInput.id = LOWEST_LISTING_MAX_OUT_OF_POCKET_INPUT_ID;
+      maxOutOfPocketInput.type = "number";
+      maxOutOfPocketInput.min = "0";
+      maxOutOfPocketInput.step = "0.01";
+      maxOutOfPocketInput.placeholder = "自付≤";
+      maxOutOfPocketInput.title = "用券后自付金额上限（挂单价上限 = 满减门槛 + 自付上限）";
+      maxOutOfPocketInput.style.cssText = "width:.9rem;height:.28rem;margin-left:.08rem;padding:0 .06rem;border:1px solid #dcdee2;border-radius:.04rem;font-size:.13rem;color:#17233d;box-sizing:border-box;vertical-align:middle;";
       button = document.createElement("button");
       button.id = LOWEST_LISTING_BUTTON_ID;
       button.type = "button";
       button.className = "ivu-btn ivu-btn-default ivu-btn-sm";
-      button.textContent = "查询最低挂单价";
+      button.textContent = "查询满减可用";
       button.style.cssText = "margin-left:.08rem;";
       button.addEventListener("click", startQuery);
-      anchor.append(thresholdInput, button);
+      anchor.append(thresholdInput, maxOutOfPocketInput, button);
       return true;
     }
     function start(nextVm) {
@@ -1084,6 +1105,8 @@
       button = null;
       thresholdInput?.remove();
       thresholdInput = null;
+      maxOutOfPocketInput?.remove();
+      maxOutOfPocketInput = null;
       qualifyOnlyCheckbox = null;
       vm = null;
     }

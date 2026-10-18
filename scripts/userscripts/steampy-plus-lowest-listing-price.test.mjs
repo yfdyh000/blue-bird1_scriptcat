@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  isQualifyingLowestPrice,
+  isPriceInRange,
   normalizeSteamPyRegion,
+  parseInRangeListing,
   parseLowestInStockListing,
   parseThreshold,
 } from "../../src/lib/steampy/steampy-plus-lowest-listing-price.js";
@@ -81,10 +82,48 @@ test("parseThreshold accepts non-negative numbers and rejects invalid input", ()
   assert.equal(parseThreshold("abc"), null);
 });
 
-test("isQualifyingLowestPrice compares against threshold and treats missing threshold as qualifying", () => {
-  assert.equal(isQualifyingLowestPrice(0.32, 0.32), true);
-  assert.equal(isQualifyingLowestPrice(0.5, 0.32), true);
-  assert.equal(isQualifyingLowestPrice(0.1, 0.32), false);
-  assert.equal(isQualifyingLowestPrice(0.32, null), true);
-  assert.equal(isQualifyingLowestPrice(0.32, undefined), true);
+test("isPriceInRange checks both ends of the coupon range", () => {
+  assert.equal(isPriceInRange(0.32, 0.32, 0.62), true);
+  assert.equal(isPriceInRange(0.4, 0.32, 0.62), true);
+  assert.equal(isPriceInRange(0.62, 0.32, 0.62), true);
+  assert.equal(isPriceInRange(0.31, 0.32, 0.62), false);
+  assert.equal(isPriceInRange(0.63, 0.32, 0.62), false);
+});
+
+test("parseInRangeListing returns the cheapest in-stock listing inside the range", () => {
+  const result = parseInRangeListing([
+    { keyPrice: "0.10", stock: 9 },
+    { keyPrice: "0.40", stock: 2 },
+    { keyPrice: "0.50", stock: 1 },
+    { keyPrice: "1.00", stock: 5 },
+  ], 0.32, 0.62);
+  assert.deepEqual(result, { price: 0.4, stock: 2 });
+});
+
+test("parseInRangeListing ignores out-of-stock listings inside the range", () => {
+  const result = parseInRangeListing([
+    { keyPrice: "0.40", stock: 0 },
+    { keyPrice: "0.45", stock: 3 },
+  ], 0.32, 0.62);
+  assert.deepEqual(result, { price: 0.45, stock: 3 });
+});
+
+test("parseInRangeListing returns null when no listing falls inside the range", () => {
+  const below = parseInRangeListing([
+    { keyPrice: "0.10", stock: 9 },
+    { keyPrice: "0.20", stock: 1 },
+  ], 0.32, 0.62);
+  assert.equal(below, null);
+
+  const above = parseInRangeListing([
+    { keyPrice: "0.70", stock: 1 },
+    { keyPrice: "1.00", stock: 2 },
+  ], 0.32, 0.62);
+  assert.equal(above, null);
+});
+
+test("parseInRangeListing handles empty and invalid inputs", () => {
+  assert.equal(parseInRangeListing([], 0.32, 0.62), null);
+  assert.equal(parseInRangeListing(null, 0.32, 0.62), null);
+  assert.equal(parseInRangeListing({}, 0.32, 0.62), null);
 });
