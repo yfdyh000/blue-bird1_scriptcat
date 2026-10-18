@@ -193,6 +193,11 @@ export function createSteamPyLowestListingPriceController({ client } = {}) {
     renderProgress(0, total);
     if (!total) return;
     querying = true;
+    const tbody = panel?.querySelector("tbody");
+    for (let index = 0; index < total; index += 1) {
+      const row = document.createElement("tr");
+      tbody.append(row);
+    }
     let completed = 0;
     let nextIndex = 0;
 
