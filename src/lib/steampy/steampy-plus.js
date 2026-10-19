@@ -47,7 +47,10 @@ export function startSteamPyPlus({ ajaxHooker, elmGetter, jQuery }) {
     jQuery,
     filter,
     rating,
-    lowestListingPrice: createSteamPyLowestListingPriceController({ client: xbootClient }),
+    lowestListingPrice: createSteamPyLowestListingPriceController({
+      client: xbootClient,
+      shouldShow: filter.shouldShow,
+    }),
   });
   const seller = createSteamPySellerController({
     client: xbootClient,

@@ -6,6 +6,7 @@ const LOWEST_LISTING_THRESHOLD_STORAGE_KEY = "steamPyPlusLowestListingThreshold"
 const LOWEST_LISTING_MAX_OUT_OF_POCKET_STORAGE_KEY = "steamPyPlusLowestListingMaxOutOfPocket";
 const LOWEST_LISTING_QUALIFY_ONLY_STORAGE_KEY = "steamPyPlusLowestListingQualifyOnly";
 const LOWEST_LISTING_PAGE_COUNT_STORAGE_KEY = "steamPyPlusLowestListingPageCount";
+const LOWEST_LISTING_FILTER_EXTRA_PAGES_STORAGE_KEY = "steamPyPlusLowestListingFilterExtraPages";
 const LOWEST_LISTING_EXTRA_PAGES_STORAGE_KEY = "steamPyPlusLowestListingExtraPages";
 const LOWEST_LISTING_PANEL_ID = "steamPyPlusLowestListingPricePanel";
 const LOWEST_LISTING_MARKER_ATTR = "data-steam-py-plus-lowest-price";
@@ -78,6 +79,7 @@ function waitFor(milliseconds) {
 
 export function createSteamPyLowestListingPriceController({
   client,
+  shouldShow = null,
   getValue = GM_getValue,
   setValue = GM_setValue,
 } = {}) {
@@ -372,13 +374,18 @@ export function createSteamPyLowestListingPriceController({
     if (pageCount > 1 && !isAllBelowThreshold(firstPageGames, threshold) && client?.fetchSteamGameKeyHot) {
       const searchForm = vm?.searchForm || {};
       const pageSize = Number(searchForm.pageSize) || firstPageCount || 30;
+      const filterExtraPages = getValue?.(LOWEST_LISTING_FILTER_EXTRA_PAGES_STORAGE_KEY, false);
       const collected = [...firstPageGames];
       for (let pageNumber = 2; pageNumber <= pageCount; pageNumber += 1) {
         try {
           const pageResponse = await client.fetchSteamGameKeyHot({ ...searchForm, pageNumber, pageSize });
           const pageGames = pageResponse?.content ?? pageResponse?.result?.content ?? [];
           if (!Array.isArray(pageGames) || pageGames.length === 0) break;
-          collected.push(...pageGames);
+          const usableGames = filterExtraPages && typeof shouldShow === "function"
+            ? pageGames.filter((game) => shouldShow(game))
+            : pageGames;
+          if (usableGames.length === 0) break;
+          collected.push(...usableGames);
         } catch {
           break;
         }
