@@ -776,9 +776,11 @@
   var LOWEST_LISTING_BUTTON_ID = "steamPyPlusLowestListingPriceButton";
   var LOWEST_LISTING_THRESHOLD_INPUT_ID = "steamPyPlusLowestListingPriceThreshold";
   var LOWEST_LISTING_MAX_OUT_OF_POCKET_INPUT_ID = "steamPyPlusLowestListingPriceMaxOutOfPocket";
+  var LOWEST_LISTING_PAGE_COUNT_INPUT_ID = "steamPyPlusLowestListingPageCount";
   var LOWEST_LISTING_THRESHOLD_STORAGE_KEY = "steamPyPlusLowestListingThreshold";
   var LOWEST_LISTING_MAX_OUT_OF_POCKET_STORAGE_KEY = "steamPyPlusLowestListingMaxOutOfPocket";
   var LOWEST_LISTING_QUALIFY_ONLY_STORAGE_KEY = "steamPyPlusLowestListingQualifyOnly";
+  var LOWEST_LISTING_PAGE_COUNT_STORAGE_KEY = "steamPyPlusLowestListingPageCount";
   var LOWEST_LISTING_PANEL_ID = "steamPyPlusLowestListingPricePanel";
   var LOWEST_LISTING_MARKER_ATTR = "data-steam-py-plus-lowest-price";
   var FILTER_ANCHOR_SELECTOR2 = ".tag.flex-row.align-items-center";
@@ -788,6 +790,11 @@
   var QUERY_INTERVAL_MIN_MS = 300;
   var QUERY_INTERVAL_MAX_MS = 600;
   var EXTRA_PAGES = 3;
+  function isAllBelowThreshold(games, threshold) {
+    if (threshold === null || threshold === void 0) return false;
+    if (!Array.isArray(games) || games.length === 0) return false;
+    return games.every((game) => Number(game?.keyPrice) < Number(threshold));
+  }
   function normalizeSteamPyRegion(value) {
     const region = String(value ?? "").trim().toLowerCase();
     return SUPPORTED_REGIONS.has(region) ? region : "cn";
@@ -833,6 +840,7 @@
     let button = null;
     let thresholdInput = null;
     let maxOutOfPocketInput = null;
+    let pageCountInput = null;
     let qualifyOnlyCheckbox = null;
     let panel = null;
     let querying = false;
@@ -973,7 +981,7 @@
       row.dataset.qualify = qualify ? "1" : "0";
       row.style.display = qualifyOnlyCheckbox?.checked && !qualify ? "none" : "";
       const name = document.createElement("td");
-      name.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;";
+      name.style.cssText = "display:flex;align-items:center;padding:.06rem .1rem;border:1px solid #e8eaec;";
       const gameId = gameIdOf(game);
       const appId = game?.appId;
       const nameText = gameNameOf(game);
@@ -996,7 +1004,7 @@
         steamLink.target = "_blank";
         steamLink.rel = "noopener noreferrer";
         steamLink.title = "打开 Steam 商店页";
-        steamLink.style.cssText = "margin-left:.06rem;font-size:.11rem;color:#1a9fff;text-decoration:none;";
+        steamLink.style.cssText = "margin-left:auto;font-size:.11rem;color:#1a9fff;text-decoration:none;";
         name.append(steamLink);
       }
       const price = document.createElement("td");
@@ -1090,7 +1098,25 @@
         if (element) element.textContent = "请先输入满减门槛金额";
         return;
       }
-      const games = firstPageGames;
+      const pageCount = Math.max(1, Math.floor(parseThreshold(pageCountInput?.value) ?? 1));
+      let games = firstPageGames;
+      if (pageCount > 1 && !isAllBelowThreshold(firstPageGames, threshold) && client?.fetchSteamGameKeyHot) {
+        const searchForm = vm?.searchForm || {};
+        const pageSize = Number(searchForm.pageSize) || firstPageCount || 30;
+        const collected = [...firstPageGames];
+        for (let pageNumber = 2; pageNumber <= pageCount; pageNumber += 1) {
+          try {
+            const pageResponse = await client.fetchSteamGameKeyHot({ ...searchForm, pageNumber, pageSize });
+            const pageGames = pageResponse?.content ?? pageResponse?.result?.content ?? [];
+            if (!Array.isArray(pageGames) || pageGames.length === 0) break;
+            collected.push(...pageGames);
+          } catch {
+            break;
+          }
+          await waitFor(QUERY_INTERVAL_MIN_MS);
+        }
+        games = collected;
+      }
       const total = games.length;
       renderProgress(0, total);
       if (!total) return;
@@ -1151,12 +1177,15 @@
     function persistInputs() {
       setValue?.(LOWEST_LISTING_THRESHOLD_STORAGE_KEY, thresholdInput?.value ?? "");
       setValue?.(LOWEST_LISTING_MAX_OUT_OF_POCKET_STORAGE_KEY, maxOutOfPocketInput?.value ?? "");
+      setValue?.(LOWEST_LISTING_PAGE_COUNT_STORAGE_KEY, pageCountInput?.value ?? "1");
     }
     function restoreInputs() {
       const threshold = getValue?.(LOWEST_LISTING_THRESHOLD_STORAGE_KEY, "");
       const maxOutOfPocket = getValue?.(LOWEST_LISTING_MAX_OUT_OF_POCKET_STORAGE_KEY, "");
+      const pageCount = getValue?.(LOWEST_LISTING_PAGE_COUNT_STORAGE_KEY, "1");
       if (thresholdInput) thresholdInput.value = String(threshold ?? "");
       if (maxOutOfPocketInput) maxOutOfPocketInput.value = String(maxOutOfPocket ?? "");
+      if (pageCountInput) pageCountInput.value = String(pageCount ?? "1");
     }
     function startQuery() {
       if (querying) return;
@@ -1166,12 +1195,13 @@
       runQuery();
     }
     function mountButton() {
-      if (button?.isConnected && thresholdInput?.isConnected && maxOutOfPocketInput?.isConnected) return true;
+      if (button?.isConnected && thresholdInput?.isConnected && maxOutOfPocketInput?.isConnected && pageCountInput?.isConnected) return true;
       const anchor = document.querySelector(FILTER_ANCHOR_SELECTOR2);
       if (!anchor) return false;
       document.getElementById(LOWEST_LISTING_BUTTON_ID)?.remove();
       document.getElementById(LOWEST_LISTING_THRESHOLD_INPUT_ID)?.remove();
       document.getElementById(LOWEST_LISTING_MAX_OUT_OF_POCKET_INPUT_ID)?.remove();
+      document.getElementById(LOWEST_LISTING_PAGE_COUNT_INPUT_ID)?.remove();
       thresholdInput = document.createElement("input");
       thresholdInput.id = LOWEST_LISTING_THRESHOLD_INPUT_ID;
       thresholdInput.type = "number";
@@ -1188,15 +1218,25 @@
       maxOutOfPocketInput.placeholder = "自付≤";
       maxOutOfPocketInput.title = "用券后自付金额上限（挂单价上限 = 满减门槛 + 自付上限）";
       maxOutOfPocketInput.style.cssText = "width:.9rem;height:.28rem;margin-left:.08rem;padding:0 .06rem;border:1px solid #dcdee2;border-radius:.04rem;font-size:.13rem;color:#17233d;box-sizing:border-box;vertical-align:middle;";
+      pageCountInput = document.createElement("input");
+      pageCountInput.id = LOWEST_LISTING_PAGE_COUNT_INPUT_ID;
+      pageCountInput.type = "number";
+      pageCountInput.min = "1";
+      pageCountInput.max = "10";
+      pageCountInput.step = "1";
+      pageCountInput.value = "1";
+      pageCountInput.placeholder = "跨页";
+      pageCountInput.title = "查询的游戏页数：1=仅当前页（默认）；大于1时，若第一页并非全是超低价，会自动继续查后续页游戏（后续页为未筛选列表）。";
+      pageCountInput.style.cssText = "width:.7rem;height:.28rem;margin-left:.08rem;padding:0 .06rem;border:1px solid #dcdee2;border-radius:.04rem;font-size:.13rem;color:#17233d;box-sizing:border-box;vertical-align:middle;";
       button = document.createElement("button");
       button.id = LOWEST_LISTING_BUTTON_ID;
       button.type = "button";
       button.className = "ivu-btn ivu-btn-default ivu-btn-sm";
       button.textContent = "查看低价";
-      button.title = "查看本页游戏是否有符合条件的有库存挂单：挂单价需不低于“满减门槛”，且不超过“门槛+自付上限”（自付可留空表示不设上限）。结果标注在卡片上并以面板列出。";
+      button.title = "查看游戏是否有符合条件的有库存挂单：挂单价需不低于“满减门槛”，且不超过“门槛+自付上限”（自付可留空表示不设上限）。结果标注在卡片上并以面板列出。";
       button.style.cssText = "margin-left:.08rem;";
       button.addEventListener("click", startQuery);
-      anchor.append(thresholdInput, maxOutOfPocketInput, button);
+      anchor.append(thresholdInput, maxOutOfPocketInput, pageCountInput, button);
       restoreInputs();
       return true;
     }
@@ -1216,6 +1256,8 @@
       thresholdInput = null;
       maxOutOfPocketInput?.remove();
       maxOutOfPocketInput = null;
+      pageCountInput?.remove();
+      pageCountInput = null;
       qualifyOnlyCheckbox = null;
       vm = null;
     }
