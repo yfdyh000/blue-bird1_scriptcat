@@ -1177,15 +1177,15 @@
     function persistInputs() {
       setValue?.(LOWEST_LISTING_THRESHOLD_STORAGE_KEY, thresholdInput?.value ?? "");
       setValue?.(LOWEST_LISTING_MAX_OUT_OF_POCKET_STORAGE_KEY, maxOutOfPocketInput?.value ?? "");
-      setValue?.(LOWEST_LISTING_PAGE_COUNT_STORAGE_KEY, pageCountInput?.value ?? "1");
+      setValue?.(LOWEST_LISTING_PAGE_COUNT_STORAGE_KEY, pageCountInput?.value ?? "");
     }
     function restoreInputs() {
       const threshold = getValue?.(LOWEST_LISTING_THRESHOLD_STORAGE_KEY, "");
       const maxOutOfPocket = getValue?.(LOWEST_LISTING_MAX_OUT_OF_POCKET_STORAGE_KEY, "");
-      const pageCount = getValue?.(LOWEST_LISTING_PAGE_COUNT_STORAGE_KEY, "1");
+      const pageCount = getValue?.(LOWEST_LISTING_PAGE_COUNT_STORAGE_KEY, "");
       if (thresholdInput) thresholdInput.value = String(threshold ?? "");
       if (maxOutOfPocketInput) maxOutOfPocketInput.value = String(maxOutOfPocket ?? "");
-      if (pageCountInput) pageCountInput.value = String(pageCount ?? "1");
+      if (pageCountInput) pageCountInput.value = String(pageCount ?? "");
     }
     function startQuery() {
       if (querying) return;
@@ -1224,10 +1224,9 @@
       pageCountInput.min = "1";
       pageCountInput.max = "10";
       pageCountInput.step = "1";
-      pageCountInput.value = "1";
-      pageCountInput.placeholder = "跨页";
-      pageCountInput.title = "查询的游戏页数：1=仅当前页（默认）；大于1时，若第一页并非全是超低价，会自动继续查后续页游戏（后续页为未筛选列表）。";
-      pageCountInput.style.cssText = "width:.7rem;height:.28rem;margin-left:.08rem;padding:0 .06rem;border:1px solid #dcdee2;border-radius:.04rem;font-size:.13rem;color:#17233d;box-sizing:border-box;vertical-align:middle;";
+      pageCountInput.placeholder = "1";
+      pageCountInput.title = "查询的游戏页数，留空为 1（仅当前页）；大于1时，若第一页并非全是超低价，会自动继续查后续页游戏（后续页为未筛选列表）。";
+      pageCountInput.style.cssText = "width:.5rem;height:.28rem;margin-left:.08rem;padding:0 .04rem;border:1px solid #dcdee2;border-radius:.04rem;font-size:.13rem;color:#17233d;box-sizing:border-box;vertical-align:middle;text-align:center;";
       button = document.createElement("button");
       button.id = LOWEST_LISTING_BUTTON_ID;
       button.type = "button";
@@ -1236,7 +1235,7 @@
       button.title = "查看游戏是否有符合条件的有库存挂单：挂单价需不低于“满减门槛”，且不超过“门槛+自付上限”（自付可留空表示不设上限）。结果标注在卡片上并以面板列出。";
       button.style.cssText = "margin-left:.08rem;";
       button.addEventListener("click", startQuery);
-      anchor.append(thresholdInput, maxOutOfPocketInput, pageCountInput, button);
+      anchor.append(thresholdInput, maxOutOfPocketInput, button, pageCountInput);
       restoreInputs();
       return true;
     }
