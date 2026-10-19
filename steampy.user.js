@@ -1145,8 +1145,7 @@
             const pageGames = pageResponse?.content ?? pageResponse?.result?.content ?? [];
             if (!Array.isArray(pageGames) || pageGames.length === 0) break;
             const usableGames = activeFilterExtraPages && typeof shouldShow === "function" ? pageGames.filter((game) => shouldShow(game)) : pageGames;
-            if (usableGames.length === 0) break;
-            collected.push(...usableGames);
+            if (usableGames.length > 0) collected.push(...usableGames);
           } catch {
             break;
           }
