@@ -1141,7 +1141,6 @@
         const searchForm = vm?.searchForm || {};
         const pageSize = Number(searchForm.pageSize) || firstPageCount || 30;
         const collected = [...firstPageGames];
-        const seenIds = new Set(firstPageGames.map((game) => gameIdOf(game)).filter(Boolean));
         for (let pageNumber = currentPageNumber + 1; pageNumber <= currentPageNumber + pageCount - 1; pageNumber += 1) {
           try {
             activeRequestCount += 1;
@@ -1149,14 +1148,7 @@
             activeLastCheckedPage = pageNumber;
             const pageGames = pageResponse?.content ?? pageResponse?.result?.content ?? [];
             if (!Array.isArray(pageGames) || pageGames.length === 0) break;
-            const usableGames = pageGames.filter((game) => {
-              const gameId = gameIdOf(game);
-              return !gameId || !seenIds.has(gameId);
-            }).filter((game) => !activeFilterExtraPages || typeof shouldShow !== "function" || shouldShow(game));
-            usableGames.forEach((game) => {
-              const gameId = gameIdOf(game);
-              if (gameId) seenIds.add(gameId);
-            });
+            const usableGames = !activeFilterExtraPages || typeof shouldShow !== "function" ? pageGames : pageGames.filter((game) => shouldShow(game));
             if (usableGames.length > 0) collected.push(...usableGames);
           } catch {
             break;
