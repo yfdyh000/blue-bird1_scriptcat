@@ -850,6 +850,9 @@
     let querying = false;
     let queryGeneration = 0;
     let menusRegistered = false;
+    let activePageCount = 1;
+    let activeFilterExtraPages = true;
+    let activeLastCheckedPage = 1;
     function gameList() {
       return Array.isArray(vm?.gameList) ? vm.gameList : [];
     }
@@ -992,7 +995,9 @@
       const element = panel?.querySelector("[data-steam-py-plus-lowest-progress]");
       if (!element) return;
       const qualifyCount = panel ? [...panel.querySelectorAll("tbody tr[data-qualify='1']")].length : 0;
-      element.textContent = `已处理 ${completed}/${total} · 可用 ${qualifyCount}`;
+      const currentPage = Math.max(1, activeLastCheckedPage);
+      const filterLabel = activeFilterExtraPages ? "开" : "关";
+      element.textContent = `已处理 ${completed}/${total} · 可用 ${qualifyCount} · 第 ${currentPage}/${activePageCount} 页 · 筛选 ${filterLabel}`;
     }
     function renderRow(index, game, result, region) {
       if (!panel) return;
@@ -1118,25 +1123,28 @@
       const generation = ++queryGeneration;
       const firstPageGames = gameList();
       const firstPageCount = firstPageGames.length;
-      renderProgress(0, firstPageCount);
       if (threshold === null) {
         const element = panel?.querySelector("[data-steam-py-plus-lowest-progress]");
         if (element) element.textContent = "请先输入满减门槛金额";
         return;
       }
       const pageCount = Math.max(1, Math.floor(parseThreshold(pageCountInput?.value) ?? 1));
+      activePageCount = pageCount;
+      activeFilterExtraPages = isFilterExtraPagesEnabled();
+      activeLastCheckedPage = 1;
+      renderProgress(0, firstPageCount);
       let games = firstPageGames;
       if (pageCount > 1 && !isAllBelowThreshold(firstPageGames, threshold) && client?.fetchSteamGameKeyHot) {
         const searchForm = vm?.searchForm || {};
         const pageSize = Number(searchForm.pageSize) || firstPageCount || 30;
-        const filterExtraPages = isFilterExtraPagesEnabled();
         const collected = [...firstPageGames];
         for (let pageNumber = 2; pageNumber <= pageCount; pageNumber += 1) {
           try {
             const pageResponse = await client.fetchSteamGameKeyHot({ ...searchForm, pageNumber, pageSize });
+            activeLastCheckedPage = pageNumber;
             const pageGames = pageResponse?.content ?? pageResponse?.result?.content ?? [];
             if (!Array.isArray(pageGames) || pageGames.length === 0) break;
-            const usableGames = filterExtraPages && typeof shouldShow === "function" ? pageGames.filter((game) => shouldShow(game)) : pageGames;
+            const usableGames = activeFilterExtraPages && typeof shouldShow === "function" ? pageGames.filter((game) => shouldShow(game)) : pageGames;
             if (usableGames.length === 0) break;
             collected.push(...usableGames);
           } catch {
