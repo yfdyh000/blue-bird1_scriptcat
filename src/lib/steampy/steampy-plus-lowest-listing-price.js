@@ -98,6 +98,9 @@ export function createSteamPyLowestListingPriceController({
   let activePageCount = 1;
   let activeFilterExtraPages = true;
   let activeLastCheckedPage = 1;
+  let activeBasePageNumber = 1;
+  let activeRequestCount = 0;
+  let activeTotalRequests = 0;
 
   function gameList() {
     return Array.isArray(vm?.gameList) ? vm.gameList : [];
@@ -258,9 +261,9 @@ export function createSteamPyLowestListingPriceController({
     const qualifyCount = panel
       ? [...panel.querySelectorAll("tbody tr[data-qualify='1']")].length
       : 0;
-    const currentPage = Math.max(1, activeLastCheckedPage);
+    const currentPage = Math.max(1, activeLastCheckedPage - activeBasePageNumber + 1);
     const filterLabel = activeFilterExtraPages ? "开" : "关";
-    element.textContent = `已处理 ${completed}/${total} · 可用 ${qualifyCount} · 第 ${currentPage}/${activePageCount} 页 · 筛选 ${filterLabel}`;
+    element.textContent = `已处理 ${completed}/${total} · 可用 ${qualifyCount} · 第 ${currentPage}/${activePageCount} 页 · 筛选 ${filterLabel} · 请求 ${activeRequestCount}/${activeTotalRequests}`;
   }
 
   function renderRow(index, game, result, region) {
@@ -348,6 +351,7 @@ export function createSteamPyLowestListingPriceController({
     if (gameId === null || gameId === undefined || gameId === "") {
       return { ok: false, error: "缺少 gameId" };
     }
+    activeRequestCount += 1;
     const firstResponse = await client.fetchKeySaleList({ region, gameId });
     const firstContent = firstResponse?.content ?? firstResponse?.result?.content ?? firstResponse?.result ?? firstResponse;
     const firstListings = Array.isArray(firstContent) ? firstContent : [];
@@ -360,6 +364,7 @@ export function createSteamPyLowestListingPriceController({
     if (hasQualifyingPrice) {
       for (let pageNumber = 2; pageNumber <= EXTRA_PAGES; pageNumber += 1) {
         try {
+          activeRequestCount += 1;
           const pageResponse = await client.fetchKeySaleList({ region, gameId, pageNumber });
           const pageContent = pageResponse?.content ?? pageResponse?.result?.content ?? pageResponse?.result ?? pageResponse;
           const pageListings = Array.isArray(pageContent) ? pageContent : [];
@@ -402,22 +407,34 @@ export function createSteamPyLowestListingPriceController({
     const pageCount = Math.max(1, Math.floor(parseThreshold(pageCountInput?.value) ?? 1));
     activePageCount = pageCount;
     activeFilterExtraPages = isFilterExtraPagesEnabled();
-    activeLastCheckedPage = 1;
+    const currentPageNumber = Number(vm?.searchForm?.pageNumber) || 1;
+    activeBasePageNumber = currentPageNumber;
+    activeLastCheckedPage = currentPageNumber;
+    activeRequestCount = 0;
     renderProgress(0, firstPageCount);
     let games = firstPageGames;
-    if (pageCount > 1 && !isAllBelowThreshold(firstPageGames, threshold) && client?.fetchSteamGameKeyHot) {
+    if (pageCount > 1 && client?.fetchSteamGameKeyHot) {
       const searchForm = vm?.searchForm || {};
       const pageSize = Number(searchForm.pageSize) || firstPageCount || 30;
       const collected = [...firstPageGames];
-      for (let pageNumber = 2; pageNumber <= pageCount; pageNumber += 1) {
+      const seenIds = new Set(firstPageGames.map((game) => gameIdOf(game)).filter(Boolean));
+      for (let pageNumber = currentPageNumber + 1; pageNumber <= currentPageNumber + pageCount - 1; pageNumber += 1) {
         try {
+          activeRequestCount += 1;
           const pageResponse = await client.fetchSteamGameKeyHot({ ...searchForm, pageNumber, pageSize });
           activeLastCheckedPage = pageNumber;
           const pageGames = pageResponse?.content ?? pageResponse?.result?.content ?? [];
           if (!Array.isArray(pageGames) || pageGames.length === 0) break;
-          const usableGames = activeFilterExtraPages && typeof shouldShow === "function"
-            ? pageGames.filter((game) => shouldShow(game))
-            : pageGames;
+          const usableGames = pageGames
+            .filter((game) => {
+              const gameId = gameIdOf(game);
+              return !gameId || !seenIds.has(gameId);
+            })
+            .filter((game) => !activeFilterExtraPages || typeof shouldShow !== "function" || shouldShow(game));
+          usableGames.forEach((game) => {
+            const gameId = gameIdOf(game);
+            if (gameId) seenIds.add(gameId);
+          });
           if (usableGames.length > 0) collected.push(...usableGames);
         } catch {
           break;
@@ -427,6 +444,7 @@ export function createSteamPyLowestListingPriceController({
       games = collected;
     }
     const total = games.length;
+    activeTotalRequests = total * EXTRA_PAGES + (pageCount > 1 ? pageCount - 1 : 0);
     renderProgress(0, total);
     if (!total) return;
     querying = true;
