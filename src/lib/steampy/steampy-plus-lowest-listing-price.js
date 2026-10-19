@@ -107,12 +107,17 @@ export function createSteamPyLowestListingPriceController({
     return normalizeSteamPyRegion(vm?.areas);
   }
 
-  function clearMarkers() {
+  function closePanel() {
     queryGeneration += 1;
     querying = false;
-    document.querySelectorAll(`[${LOWEST_LISTING_MARKER_ATTR}]`).forEach((marker) => marker.remove());
     panel?.remove();
     panel = null;
+    qualifyOnlyCheckbox = null;
+  }
+
+  function clearMarkers() {
+    closePanel();
+    document.querySelectorAll(`[${LOWEST_LISTING_MARKER_ATTR}]`).forEach((marker) => marker.remove());
   }
 
   function renderMarker(index, result) {
@@ -156,7 +161,7 @@ export function createSteamPyLowestListingPriceController({
     close.className = "ivu-btn ivu-btn-default ivu-btn-sm";
     close.textContent = "×";
     close.style.cssText = "min-width:.3rem;padding:0;font-size:.2rem;line-height:.3rem;cursor:pointer;";
-    close.addEventListener("click", clearMarkers);
+    close.addEventListener("click", closePanel);
     header.append(title, close);
 
     const progressRow = document.createElement("div");
@@ -201,7 +206,7 @@ export function createSteamPyLowestListingPriceController({
     dialog.append(header, progressRow, tableWrap);
     overlay.append(dialog);
     overlay.addEventListener("click", (event) => {
-      if (event.target === overlay) clearMarkers();
+      if (event.target === overlay) closePanel();
     });
     document.body.append(overlay);
     return overlay;
@@ -216,7 +221,7 @@ export function createSteamPyLowestListingPriceController({
     element.textContent = `已处理 ${completed}/${total} · 可用 ${qualifyCount}`;
   }
 
-  function renderRow(index, game, result) {
+  function renderRow(index, game, result, region) {
     if (!panel) return;
     const tbody = panel.querySelector("tbody");
     let row = tbody.children[index];
@@ -230,7 +235,31 @@ export function createSteamPyLowestListingPriceController({
     row.style.display = qualifyOnlyCheckbox?.checked && !qualify ? "none" : "";
     const name = document.createElement("td");
     name.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;";
-    name.textContent = gameNameOf(game);
+    const gameId = gameIdOf(game);
+    const appId = game?.appId;
+    const nameText = gameNameOf(game);
+    if (gameId) {
+      const detailLink = document.createElement("a");
+      detailLink.textContent = nameText;
+      detailLink.href = `https://steampy.com/cdkDetail?name=${region}&gameId=${gameId}`;
+      detailLink.target = "_blank";
+      detailLink.rel = "noopener noreferrer";
+      detailLink.title = "打开 SteamPy 详情页";
+      detailLink.style.cssText = "color:#2d8cf0;text-decoration:none;";
+      name.append(detailLink);
+    } else {
+      name.textContent = nameText;
+    }
+    if (appId) {
+      const steamLink = document.createElement("a");
+      steamLink.textContent = "Steam";
+      steamLink.href = `https://store.steampowered.com/app/${appId}/`;
+      steamLink.target = "_blank";
+      steamLink.rel = "noopener noreferrer";
+      steamLink.title = "打开 Steam 商店页";
+      steamLink.style.cssText = "margin-left:.06rem;font-size:.11rem;color:#1a9fff;text-decoration:none;";
+      name.append(steamLink);
+    }
     const price = document.createElement("td");
     price.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;font-weight:bold;";
     const status = document.createElement("td");
@@ -358,7 +387,7 @@ export function createSteamPyLowestListingPriceController({
         }
         completed += 1;
         renderProgress(completed, total);
-        renderRow(index, game, result);
+        renderRow(index, game, result, region);
         if (index < firstPageCount) renderMarker(index, result);
         if (generation !== queryGeneration) return;
         if (client?.isTokenInvalid?.()) querying = false;
