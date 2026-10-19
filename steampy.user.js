@@ -857,9 +857,13 @@
     function resolveRegion() {
       return normalizeSteamPyRegion(vm?.areas);
     }
+    let closeWaiters = [];
     function closePanel() {
       queryGeneration += 1;
       querying = false;
+      const waiters = closeWaiters;
+      closeWaiters = [];
+      waiters.forEach((resolve) => resolve());
       panel?.remove();
       panel = null;
       qualifyOnlyCheckbox = null;
@@ -897,7 +901,7 @@
       overlay.id = LOWEST_LISTING_PANEL_ID;
       overlay.style.cssText = "position:fixed;z-index:10000;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.38);";
       const dialog = document.createElement("section");
-      dialog.style.cssText = "width:min(8rem,94vw);max-height:82vh;display:flex;flex-direction:column;gap:.12rem;padding:.2rem;border-radius:.08rem;background:#fff;color:#17233d;box-sizing:border-box;";
+      dialog.style.cssText = "width:min(8rem,94vw);height:min(80vh,8.5rem);display:flex;flex-direction:column;gap:.12rem;padding:.2rem;border-radius:.08rem;background:#fff;color:#17233d;box-sizing:border-box;";
       const header = document.createElement("div");
       header.style.cssText = "display:flex;align-items:center;justify-content:space-between;";
       const title = document.createElement("h3");
@@ -931,7 +935,7 @@
       qualifyOnly.append(qualifyCheckbox, document.createTextNode("仅显示可用"));
       progressRow.append(progress, qualifyOnly);
       const tableWrap = document.createElement("div");
-      tableWrap.style.cssText = "flex:1;overflow:auto;";
+      tableWrap.style.cssText = "flex:1;overflow:auto;min-height:0;";
       const table = document.createElement("table");
       table.style.cssText = "width:100%;border-collapse:collapse;font-size:.13rem;";
       const thead = document.createElement("thead");
@@ -1093,6 +1097,7 @@
       renderProgress(0, total);
       if (!total) return;
       querying = true;
+      closeWaiters = [];
       const tbody = panel?.querySelector("tbody");
       for (let index = 0; index < total; index += 1) {
         const row = document.createElement("tr");
@@ -1111,17 +1116,23 @@
             result = { ok: false, error: "AccessToken 已失效" };
             querying = false;
           } else {
+            const closePromise = new Promise((resolve) => closeWaiters.push(resolve));
             try {
-              result = await queryGame(game, region, threshold, maxPrice);
+              const outcome = await Promise.race([
+                queryGame(game, region, threshold, maxPrice).then((value) => ({ closed: false, value })),
+                closePromise.then(() => ({ closed: true }))
+              ]);
+              if (outcome.closed) return;
+              result = outcome.value;
             } catch (error) {
               result = { ok: false, error: error?.message || String(error) };
             }
           }
+          if (generation !== queryGeneration) return;
           completed += 1;
           renderProgress(completed, total);
           renderRow(index, game, result, region);
           if (index < firstPageCount) renderMarker(index, result);
-          if (generation !== queryGeneration) return;
           if (client?.isTokenInvalid?.()) querying = false;
           if (querying) {
             const delay = QUERY_INTERVAL_MIN_MS + Math.random() * (QUERY_INTERVAL_MAX_MS - QUERY_INTERVAL_MIN_MS);
