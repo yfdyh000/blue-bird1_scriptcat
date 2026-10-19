@@ -1,9 +1,11 @@
 const LOWEST_LISTING_BUTTON_ID = "steamPyPlusLowestListingPriceButton";
 const LOWEST_LISTING_THRESHOLD_INPUT_ID = "steamPyPlusLowestListingPriceThreshold";
 const LOWEST_LISTING_MAX_OUT_OF_POCKET_INPUT_ID = "steamPyPlusLowestListingPriceMaxOutOfPocket";
+const LOWEST_LISTING_EXTRA_PAGES_CHECKBOX_ID = "steamPyPlusLowestListingExtraPages";
 const LOWEST_LISTING_THRESHOLD_STORAGE_KEY = "steamPyPlusLowestListingThreshold";
 const LOWEST_LISTING_MAX_OUT_OF_POCKET_STORAGE_KEY = "steamPyPlusLowestListingMaxOutOfPocket";
 const LOWEST_LISTING_QUALIFY_ONLY_STORAGE_KEY = "steamPyPlusLowestListingQualifyOnly";
+const LOWEST_LISTING_EXTRA_PAGES_STORAGE_KEY = "steamPyPlusLowestListingExtraPages";
 const LOWEST_LISTING_PANEL_ID = "steamPyPlusLowestListingPricePanel";
 const LOWEST_LISTING_MARKER_ATTR = "data-steam-py-plus-lowest-price";
 const FILTER_ANCHOR_SELECTOR = ".tag.flex-row.align-items-center";
@@ -311,12 +313,32 @@ export function createSteamPyLowestListingPriceController({
     if (gameId === null || gameId === undefined || gameId === "") {
       return { ok: false, error: "缺少 gameId" };
     }
-    const response = await client.fetchKeySaleList({ region, gameId });
-    const content = response?.content ?? response?.result?.content ?? response?.result ?? response;
-    const listings = Array.isArray(content) ? content : [];
-    const found = parseInRangeListing(listings, threshold, maxPrice);
-    if (found) {
-      return { ok: true, price: found.price, stock: found.stock, source: "listSale" };
+    const firstResponse = await client.fetchKeySaleList({ region, gameId });
+    const firstContent = firstResponse?.content ?? firstResponse?.result?.content ?? firstResponse?.result ?? firstResponse;
+    const firstListings = Array.isArray(firstContent) ? firstContent : [];
+    const foundInFirst = parseInRangeListing(firstListings, threshold, maxPrice);
+    if (foundInFirst) {
+      return { ok: true, price: foundInFirst.price, stock: foundInFirst.stock, source: "listSale" };
+    }
+    const listings = [...firstListings];
+    const hasQualifyingPrice = firstListings.some((item) => Number(item?.keyPrice) >= threshold);
+    if (hasQualifyingPrice) {
+      for (let pageNumber = 2; pageNumber <= EXTRA_PAGES; pageNumber += 1) {
+        try {
+          const pageResponse = await client.fetchKeySaleList({ region, gameId, pageNumber });
+          const pageContent = pageResponse?.content ?? pageResponse?.result?.content ?? pageResponse?.result ?? pageResponse;
+          const pageListings = Array.isArray(pageContent) ? pageContent : [];
+          if (!pageListings.length) break;
+          listings.push(...pageListings);
+          const found = parseInRangeListing(pageListings, threshold, maxPrice);
+          if (found) {
+            return { ok: true, price: found.price, stock: found.stock, source: "listSale" };
+          }
+        } catch {
+          break;
+        }
+        await waitFor(QUERY_INTERVAL_MIN_MS);
+      }
     }
     const lowest = parseLowestInStockListing(listings);
     const qualifying = parseInRangeListing(listings, threshold, Infinity);
@@ -343,24 +365,7 @@ export function createSteamPyLowestListingPriceController({
       if (element) element.textContent = "请先输入满减门槛金额";
       return;
     }
-    let games = firstPageGames;
-    if (!isAllBelowThreshold(firstPageGames, threshold) && client?.fetchSteamGameKeyHot) {
-      const searchForm = vm?.searchForm || {};
-      const pageSize = Number(searchForm.pageSize) || firstPageCount || 30;
-      const collected = [...firstPageGames];
-      for (let pageNumber = 2; pageNumber <= 1 + EXTRA_PAGES; pageNumber += 1) {
-        try {
-          const pageResponse = await client.fetchSteamGameKeyHot({ ...searchForm, pageNumber, pageSize });
-          const pageGames = pageResponse?.content ?? pageResponse?.result?.content ?? [];
-          if (!Array.isArray(pageGames) || pageGames.length === 0) break;
-          collected.push(...pageGames);
-        } catch {
-          break;
-        }
-        await waitFor(QUERY_INTERVAL_MIN_MS);
-      }
-      games = collected;
-    }
+    const games = firstPageGames;
     const total = games.length;
     renderProgress(0, total);
     if (!total) return;

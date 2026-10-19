@@ -788,11 +788,6 @@
   var QUERY_INTERVAL_MIN_MS = 300;
   var QUERY_INTERVAL_MAX_MS = 600;
   var EXTRA_PAGES = 3;
-  function isAllBelowThreshold(games, threshold) {
-    if (threshold === null || threshold === void 0) return false;
-    if (!Array.isArray(games) || games.length === 0) return false;
-    return games.every((game) => Number(game?.keyPrice) < Number(threshold));
-  }
   function normalizeSteamPyRegion(value) {
     const region = String(value ?? "").trim().toLowerCase();
     return SUPPORTED_REGIONS.has(region) ? region : "cn";
@@ -1044,12 +1039,32 @@
       if (gameId === null || gameId === void 0 || gameId === "") {
         return { ok: false, error: "缺少 gameId" };
       }
-      const response = await client.fetchKeySaleList({ region, gameId });
-      const content = response?.content ?? response?.result?.content ?? response?.result ?? response;
-      const listings = Array.isArray(content) ? content : [];
-      const found = parseInRangeListing(listings, threshold, maxPrice);
-      if (found) {
-        return { ok: true, price: found.price, stock: found.stock, source: "listSale" };
+      const firstResponse = await client.fetchKeySaleList({ region, gameId });
+      const firstContent = firstResponse?.content ?? firstResponse?.result?.content ?? firstResponse?.result ?? firstResponse;
+      const firstListings = Array.isArray(firstContent) ? firstContent : [];
+      const foundInFirst = parseInRangeListing(firstListings, threshold, maxPrice);
+      if (foundInFirst) {
+        return { ok: true, price: foundInFirst.price, stock: foundInFirst.stock, source: "listSale" };
+      }
+      const listings = [...firstListings];
+      const hasQualifyingPrice = firstListings.some((item) => Number(item?.keyPrice) >= threshold);
+      if (hasQualifyingPrice) {
+        for (let pageNumber = 2; pageNumber <= EXTRA_PAGES; pageNumber += 1) {
+          try {
+            const pageResponse = await client.fetchKeySaleList({ region, gameId, pageNumber });
+            const pageContent = pageResponse?.content ?? pageResponse?.result?.content ?? pageResponse?.result ?? pageResponse;
+            const pageListings = Array.isArray(pageContent) ? pageContent : [];
+            if (!pageListings.length) break;
+            listings.push(...pageListings);
+            const found = parseInRangeListing(pageListings, threshold, maxPrice);
+            if (found) {
+              return { ok: true, price: found.price, stock: found.stock, source: "listSale" };
+            }
+          } catch {
+            break;
+          }
+          await waitFor(QUERY_INTERVAL_MIN_MS);
+        }
       }
       const lowest = parseLowestInStockListing(listings);
       const qualifying = parseInRangeListing(listings, threshold, Infinity);
@@ -1075,24 +1090,7 @@
         if (element) element.textContent = "请先输入满减门槛金额";
         return;
       }
-      let games = firstPageGames;
-      if (!isAllBelowThreshold(firstPageGames, threshold) && client?.fetchSteamGameKeyHot) {
-        const searchForm = vm?.searchForm || {};
-        const pageSize = Number(searchForm.pageSize) || firstPageCount || 30;
-        const collected = [...firstPageGames];
-        for (let pageNumber = 2; pageNumber <= 1 + EXTRA_PAGES; pageNumber += 1) {
-          try {
-            const pageResponse = await client.fetchSteamGameKeyHot({ ...searchForm, pageNumber, pageSize });
-            const pageGames = pageResponse?.content ?? pageResponse?.result?.content ?? [];
-            if (!Array.isArray(pageGames) || pageGames.length === 0) break;
-            collected.push(...pageGames);
-          } catch {
-            break;
-          }
-          await waitFor(QUERY_INTERVAL_MIN_MS);
-        }
-        games = collected;
-      }
+      const games = firstPageGames;
       const total = games.length;
       renderProgress(0, total);
       if (!total) return;
@@ -2952,11 +2950,11 @@
     async function fetchSteamGameByAppId(appId) {
       return requestJson(buildSearchUrl("/xboot/steamGame/searchByAppId", { appId }));
     }
-    async function fetchKeySaleList({ region = "cn", gameId }) {
+    async function fetchKeySaleList({ region = "cn", gameId, pageNumber = 1, pageSize = 20 }) {
       const endpoints = getKeySaleEndpoints(region);
       return requestJson(buildSearchUrl(`${endpoints.keySale}/listSale`, {
-        pageNumber: 1,
-        pageSize: 20,
+        pageNumber,
+        pageSize,
         sort: "keyPrice",
         order: "asc",
         startDate: "",
