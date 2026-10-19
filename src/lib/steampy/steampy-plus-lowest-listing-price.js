@@ -7,6 +7,8 @@ const LOWEST_LISTING_MAX_OUT_OF_POCKET_STORAGE_KEY = "steamPyPlusLowestListingMa
 const LOWEST_LISTING_QUALIFY_ONLY_STORAGE_KEY = "steamPyPlusLowestListingQualifyOnly";
 const LOWEST_LISTING_PAGE_COUNT_STORAGE_KEY = "steamPyPlusLowestListingPageCount";
 const LOWEST_LISTING_FILTER_EXTRA_PAGES_STORAGE_KEY = "steamPyPlusLowestListingFilterExtraPages";
+const LOWEST_LISTING_FILTER_EXTRA_PAGES_MENU_ID = "steam-py-plus-lowest-filter-extra-pages";
+const DEFAULT_FILTER_EXTRA_PAGES = true;
 const LOWEST_LISTING_EXTRA_PAGES_STORAGE_KEY = "steamPyPlusLowestListingExtraPages";
 const LOWEST_LISTING_PANEL_ID = "steamPyPlusLowestListingPricePanel";
 const LOWEST_LISTING_MARKER_ATTR = "data-steam-py-plus-lowest-price";
@@ -92,6 +94,7 @@ export function createSteamPyLowestListingPriceController({
   let panel = null;
   let querying = false;
   let queryGeneration = 0;
+  let menusRegistered = false;
 
   function gameList() {
     return Array.isArray(vm?.gameList) ? vm.gameList : [];
@@ -111,6 +114,29 @@ export function createSteamPyLowestListingPriceController({
 
   function resolveRegion() {
     return normalizeSteamPyRegion(vm?.areas);
+  }
+
+  function isFilterExtraPagesEnabled() {
+    return Boolean(getValue?.(LOWEST_LISTING_FILTER_EXTRA_PAGES_STORAGE_KEY, DEFAULT_FILTER_EXTRA_PAGES));
+  }
+
+  function registerMenu() {
+    if (menusRegistered || typeof GM_registerMenuCommand !== "function") return;
+    menusRegistered = true;
+    const enabled = isFilterExtraPagesEnabled();
+    GM_registerMenuCommand(
+      `跨页套用价格筛选：${enabled ? "已开启（点击关闭）" : "已关闭（点击开启）"}`,
+      () => {
+        const next = !isFilterExtraPagesEnabled();
+        setValue?.(LOWEST_LISTING_FILTER_EXTRA_PAGES_STORAGE_KEY, next);
+        if (typeof GM_notification === "function") {
+          GM_notification(`跨页套用价格筛选已${next ? "开启" : "关闭"}`);
+        }
+        menusRegistered = false;
+        registerMenu();
+      },
+      { id: LOWEST_LISTING_FILTER_EXTRA_PAGES_MENU_ID },
+    );
   }
 
   let closeWaiters = [];
@@ -374,7 +400,7 @@ export function createSteamPyLowestListingPriceController({
     if (pageCount > 1 && !isAllBelowThreshold(firstPageGames, threshold) && client?.fetchSteamGameKeyHot) {
       const searchForm = vm?.searchForm || {};
       const pageSize = Number(searchForm.pageSize) || firstPageCount || 30;
-      const filterExtraPages = getValue?.(LOWEST_LISTING_FILTER_EXTRA_PAGES_STORAGE_KEY, false);
+      const filterExtraPages = isFilterExtraPagesEnabled();
       const collected = [...firstPageGames];
       for (let pageNumber = 2; pageNumber <= pageCount; pageNumber += 1) {
         try {
@@ -546,5 +572,5 @@ export function createSteamPyLowestListingPriceController({
     vm = null;
   }
 
-  return { cleanup, clearMarkers, start };
+  return { cleanup, clearMarkers, registerMenu, start };
 }

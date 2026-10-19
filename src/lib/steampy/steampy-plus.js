@@ -41,16 +41,18 @@ export function startSteamPyPlus({ ajaxHooker, elmGetter, jQuery }) {
     fetchSteamGameByAppId: xbootClient.fetchSteamGameByAppId,
     setHideDlcSuspended: filter.setHideDlcSuspended,
   });
+  const lowestListingPrice = createSteamPyLowestListingPriceController({
+    client: xbootClient,
+    shouldShow: filter.shouldShow,
+  });
+  lowestListingPrice.registerMenu();
   buyer = createSteamPyBuyerController({
     advancedFilter,
     elmGetter,
     jQuery,
     filter,
     rating,
-    lowestListingPrice: createSteamPyLowestListingPriceController({
-      client: xbootClient,
-      shouldShow: filter.shouldShow,
-    }),
+    lowestListingPrice,
   });
   const seller = createSteamPySellerController({
     client: xbootClient,

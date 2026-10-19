@@ -782,6 +782,8 @@
   var LOWEST_LISTING_QUALIFY_ONLY_STORAGE_KEY = "steamPyPlusLowestListingQualifyOnly";
   var LOWEST_LISTING_PAGE_COUNT_STORAGE_KEY = "steamPyPlusLowestListingPageCount";
   var LOWEST_LISTING_FILTER_EXTRA_PAGES_STORAGE_KEY = "steamPyPlusLowestListingFilterExtraPages";
+  var LOWEST_LISTING_FILTER_EXTRA_PAGES_MENU_ID = "steam-py-plus-lowest-filter-extra-pages";
+  var DEFAULT_FILTER_EXTRA_PAGES = true;
   var LOWEST_LISTING_PANEL_ID = "steamPyPlusLowestListingPricePanel";
   var LOWEST_LISTING_MARKER_ATTR = "data-steam-py-plus-lowest-price";
   var FILTER_ANCHOR_SELECTOR2 = ".tag.flex-row.align-items-center";
@@ -847,6 +849,7 @@
     let panel = null;
     let querying = false;
     let queryGeneration = 0;
+    let menusRegistered = false;
     function gameList() {
       return Array.isArray(vm?.gameList) ? vm.gameList : [];
     }
@@ -861,6 +864,27 @@
     }
     function resolveRegion() {
       return normalizeSteamPyRegion(vm?.areas);
+    }
+    function isFilterExtraPagesEnabled() {
+      return Boolean(getValue?.(LOWEST_LISTING_FILTER_EXTRA_PAGES_STORAGE_KEY, DEFAULT_FILTER_EXTRA_PAGES));
+    }
+    function registerMenu() {
+      if (menusRegistered || typeof GM_registerMenuCommand !== "function") return;
+      menusRegistered = true;
+      const enabled = isFilterExtraPagesEnabled();
+      GM_registerMenuCommand(
+        `跨页套用价格筛选：${enabled ? "已开启（点击关闭）" : "已关闭（点击开启）"}`,
+        () => {
+          const next = !isFilterExtraPagesEnabled();
+          setValue?.(LOWEST_LISTING_FILTER_EXTRA_PAGES_STORAGE_KEY, next);
+          if (typeof GM_notification === "function") {
+            GM_notification(`跨页套用价格筛选已${next ? "开启" : "关闭"}`);
+          }
+          menusRegistered = false;
+          registerMenu();
+        },
+        { id: LOWEST_LISTING_FILTER_EXTRA_PAGES_MENU_ID }
+      );
     }
     let closeWaiters = [];
     function closePanel() {
@@ -1105,7 +1129,7 @@
       if (pageCount > 1 && !isAllBelowThreshold(firstPageGames, threshold) && client?.fetchSteamGameKeyHot) {
         const searchForm = vm?.searchForm || {};
         const pageSize = Number(searchForm.pageSize) || firstPageCount || 30;
-        const filterExtraPages = getValue?.(LOWEST_LISTING_FILTER_EXTRA_PAGES_STORAGE_KEY, false);
+        const filterExtraPages = isFilterExtraPagesEnabled();
         const collected = [...firstPageGames];
         for (let pageNumber = 2; pageNumber <= pageCount; pageNumber += 1) {
           try {
@@ -1265,7 +1289,7 @@
       qualifyOnlyCheckbox = null;
       vm = null;
     }
-    return { cleanup, clearMarkers, start };
+    return { cleanup, clearMarkers, registerMenu, start };
   }
 
   // src/lib/steampy/steampy-plus-filter.js
@@ -3073,16 +3097,18 @@
       fetchSteamGameByAppId: xbootClient.fetchSteamGameByAppId,
       setHideDlcSuspended: filter.setHideDlcSuspended
     });
+    const lowestListingPrice = createSteamPyLowestListingPriceController({
+      client: xbootClient,
+      shouldShow: filter.shouldShow
+    });
+    lowestListingPrice.registerMenu();
     buyer = createSteamPyBuyerController({
       advancedFilter,
       elmGetter: elmGetter2,
       jQuery,
       filter,
       rating,
-      lowestListingPrice: createSteamPyLowestListingPriceController({
-        client: xbootClient,
-        shouldShow: filter.shouldShow
-      })
+      lowestListingPrice
     });
     const seller = createSteamPySellerController({
       client: xbootClient,
