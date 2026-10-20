@@ -1208,6 +1208,7 @@
       await Promise.all(Array.from({ length: QUERY_CONCURRENCY }, () => worker()));
       querying = false;
       if (generation !== queryGeneration) return;
+      activeTotalRequests = activeRequestCount;
       renderProgress(total, total);
       applyQualifyFilter();
       if (client?.isTokenInvalid?.()) {
