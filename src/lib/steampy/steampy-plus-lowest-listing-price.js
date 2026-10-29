@@ -9,6 +9,8 @@ const LOWEST_LISTING_PAGE_COUNT_STORAGE_KEY = "steamPyPlusLowestListingPageCount
 const LOWEST_LISTING_FILTER_EXTRA_PAGES_STORAGE_KEY = "steamPyPlusLowestListingFilterExtraPages";
 const LOWEST_LISTING_FILTER_EXTRA_PAGES_MENU_ID = "steam-py-plus-lowest-filter-extra-pages";
 const DEFAULT_FILTER_EXTRA_PAGES = true;
+const STEAM_LINK_CLASS = "steamPyPlusVisitedSteamLink";
+const LOWEST_LISTING_STYLE_ID = "steamPyPlusLowestListingStyle";
 const LOWEST_LISTING_EXTRA_PAGES_STORAGE_KEY = "steamPyPlusLowestListingExtraPages";
 const LOWEST_LISTING_PANEL_ID = "steamPyPlusLowestListingPricePanel";
 const LOWEST_LISTING_MARKER_ATTR = "data-steam-py-plus-lowest-price";
@@ -189,6 +191,11 @@ export function createSteamPyLowestListingPriceController({
   }
 
   function createPanel() {
+    document.getElementById(LOWEST_LISTING_STYLE_ID)?.remove();
+    const style = document.createElement("style");
+    style.id = LOWEST_LISTING_STYLE_ID;
+    style.textContent = `.${STEAM_LINK_CLASS} { color: #1a9fff; } .${STEAM_LINK_CLASS}:visited { color: #9a9a9a; }`;
+    document.head.appendChild(style);
     const overlay = document.createElement("div");
     overlay.id = LOWEST_LISTING_PANEL_ID;
     overlay.style.cssText = "position:fixed;z-index:10000;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.38);";
@@ -302,7 +309,8 @@ export function createSteamPyLowestListingPriceController({
       steamLink.target = "_blank";
       steamLink.rel = "noopener noreferrer";
       steamLink.title = "打开 Steam 商店页";
-      steamLink.style.cssText = "margin-left:auto;font-size:.11rem;color:#1a9fff;text-decoration:none;";
+      steamLink.className = STEAM_LINK_CLASS;
+      steamLink.style.cssText = "margin-left:auto;font-size:.11rem;text-decoration:none;";
       name.append(steamLink);
     }
     const price = document.createElement("td");
