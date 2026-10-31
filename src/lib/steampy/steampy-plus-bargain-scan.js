@@ -67,6 +67,17 @@ function formatRatio(price, average) {
   return `${(priceNumber / averageNumber * 100).toFixed(1)}%`;
 }
 
+export function steamRatingLabel(rating) {
+  const value = Number(rating);
+  if (!Number.isFinite(value) || value <= 0) return { label: "--", color: "#999" };
+  if (value >= 0.95) return { label: "好评如潮", color: "#0a7d33" };
+  if (value >= 0.8) return { label: "特别好评", color: "#16a34a" };
+  if (value >= 0.7) return { label: "多半好评", color: "#2f86eb" };
+  if (value >= 0.4) return { label: "褒贬不一", color: "#e69f00" };
+  if (value >= 0.2) return { label: "多半差评", color: "#d55e00" };
+  return { label: "差评如潮", color: "#8c8c8c" };
+}
+
 export function discountColor(ratio, price) {
   const priceNumber = Number(price);
   if (Number.isFinite(priceNumber) && priceNumber > 0) {
@@ -213,7 +224,7 @@ export function createSteamPyBargainScanController({
     const thead = document.createElement("thead");
     const headRow = document.createElement("tr");
     headRow.style.cssText = "background:#f5f7fa;";
-    [["游戏", ""], ["平时价", ""], ["当前价", ""], ["折扣", ""], ["状态", ""]].forEach(([text]) => {
+    [["游戏", ""], ["评价", ""], ["平时价", ""], ["当前价", ""], ["折扣", ""], ["状态", ""]].forEach(([text]) => {
       const th = document.createElement("th");
       th.textContent = text;
       th.style.cssText = "padding:.08rem .1rem;border:1px solid #e8eaec;text-align:left;";
@@ -289,6 +300,10 @@ export function createSteamPyBargainScanController({
       steamLink.style.cssText = "margin-left:auto;font-size:.11rem;text-decoration:none;color:#1a9fff;";
       name.append(steamLink);
     }
+    const ratingInfo = steamRatingLabel(game?.rating);
+    const rating = document.createElement("td");
+    rating.style.cssText = `padding:.06rem .1rem;border:1px solid #e8eaec;color:${ratingInfo.color};font-size:.12rem;white-space:nowrap;font-weight:bold;`;
+    rating.textContent = ratingInfo.label;
     const average = document.createElement("td");
     average.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;";
     average.textContent = formatPrice(game?.keyAveAmt);
@@ -312,7 +327,7 @@ export function createSteamPyBargainScanController({
       status.textContent = result.reason || "未命中";
       status.style.color = "#999";
     }
-    row.append(name, average, price, ratio, status);
+    row.append(name, rating, average, price, ratio, status);
     row.style.display = "";
   }
 
