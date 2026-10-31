@@ -1267,7 +1267,7 @@
       [["游戏", "name"], ["评价", "rating"], ["平时价", "average"], ["当前价", "price"], ["折扣", "ratio"], ["状态", "status"]].forEach(([text, key]) => {
         const th = document.createElement("th");
         th.dataset.sortKey = key;
-        th.title = `点击按“${text}”排序`;
+        th.title = key === "ratio" ? "点击排序：默认升序（折扣百分比最低在前），再点切换；新增结果自动排序" : `点击按“${text}”排序（默认升序，再点切换；新增结果自动排序）`;
         th.style.cssText = "padding:.08rem .1rem;border:1px solid #e8eaec;text-align:left;cursor:pointer;user-select:none;";
         const span = document.createElement("span");
         span.textContent = text;
@@ -1349,9 +1349,10 @@
     function renderRow(index, game, result, region) {
       if (!panel) return;
       const tbody = panel.querySelector("tbody");
-      let row = tbody.children[index];
+      let row = tbody.querySelector(`tr[data-game-index="${index}"]`);
       if (!row) {
         row = document.createElement("tr");
+        row.dataset.gameIndex = String(index);
         tbody.append(row);
       }
       row.replaceChildren();
@@ -1450,6 +1451,7 @@
       }
       row.append(name, rating, average, price, ratio, status);
       row.style.display = "";
+      if (activeSortColumn) sortTableRows();
     }
     async function queryGame(game, region, config) {
       const gameId = gameIdOf(game);
