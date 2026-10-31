@@ -1044,8 +1044,9 @@
   var FILTER_ANCHOR_SELECTOR3 = ".tag.flex-row.align-items-center";
   var GAME_BLOCK_SELECTOR2 = ".gameblock";
   var QUERY_CONCURRENCY2 = 2;
-  var QUERY_INTERVAL_MIN_MS2 = 300;
-  var QUERY_INTERVAL_MAX_MS2 = 600;
+  var QUERY_INTERVAL_MIN_MS2 = 600;
+  var QUERY_INTERVAL_MAX_MS2 = 1200;
+  var RATE_LIMIT_PATTERN = /频繁|限流|请求过快|too many|429/i;
   var DEFAULT_MIN_NORMAL_PRICE = 0.6;
   var DEFAULT_ABS_LOW_PRICE = 0.1;
   var DEFAULT_DISCOUNT_RATIO = 20;
@@ -1117,6 +1118,11 @@
   function waitFor2(milliseconds) {
     return new Promise((resolve) => setTimeout(resolve, milliseconds));
   }
+  function isRateLimitError(error) {
+    const status = Number(error?.response?.status);
+    if (status === 429) return true;
+    return RATE_LIMIT_PATTERN.test(error?.message || "");
+  }
   function createSteamPyBargainScanController({
     client,
     shouldShow = null,
@@ -1132,6 +1138,7 @@
     let pageCountInput = null;
     let panel = null;
     let querying = false;
+    let rateLimited = false;
     let queryGeneration = 0;
     let activePageCount = 1;
     let activeLastCheckedPage = 1;
@@ -1384,6 +1391,7 @@
       });
       const region = resolveRegion();
       const generation = ++queryGeneration;
+      rateLimited = false;
       const firstPageGames = gameList();
       const firstPageCount = firstPageGames.length;
       const pageCount = Math.max(1, Math.floor(parseThreshold(pageCountInput?.value) ?? 1));
@@ -1426,7 +1434,7 @@
       let completed = 0;
       let nextIndex = 0;
       async function worker() {
-        while (querying && generation === queryGeneration) {
+        while (querying && generation === queryGeneration && !rateLimited) {
           const index = nextIndex;
           nextIndex += 1;
           if (index >= total) return;
@@ -1445,7 +1453,13 @@
               if (outcome.closed) return;
               result = outcome.value;
             } catch (error) {
-              result = { hit: false, reason: error?.message || String(error) };
+              if (isRateLimitError(error)) {
+                rateLimited = true;
+                querying = false;
+                result = { hit: false, reason: "疑似被限流" };
+              } else {
+                result = { hit: false, reason: error?.message || String(error) };
+              }
             }
           }
           if (generation !== queryGeneration) return;
@@ -1454,7 +1468,7 @@
           renderRow(index, game, result, region);
           if (index < firstPageCount) renderMarker(index, result);
           if (client?.isTokenInvalid?.()) querying = false;
-          if (querying) {
+          if (querying && !rateLimited) {
             const delay = QUERY_INTERVAL_MIN_MS2 + Math.random() * (QUERY_INTERVAL_MAX_MS2 - QUERY_INTERVAL_MIN_MS2);
             await waitFor2(delay);
           }
@@ -1468,6 +1482,10 @@
       if (client?.isTokenInvalid?.()) {
         const element = panel?.querySelector("[data-steam-py-plus-bargain-progress]");
         if (element) element.textContent = "已停止：AccessToken 已失效，请重新登录后刷新页面";
+      }
+      if (rateLimited) {
+        const element = panel?.querySelector("[data-steam-py-plus-bargain-progress]");
+        if (element) element.textContent = "已停止：疑似被限流，请降低页数或稍后再试";
       }
     }
     let configPanel = null;
