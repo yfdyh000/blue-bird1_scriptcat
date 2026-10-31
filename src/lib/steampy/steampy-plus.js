@@ -1,6 +1,7 @@
 import { readSteampyLocalToken } from "./access-token.js";
 import { installSteamPyAjaxHooks } from "./steampy-plus-ajax-hooks.js";
 import { createSteamPyAdvancedFilterController } from "./steampy-plus-advanced-filter.js";
+import { createSteamPyBargainScanController } from "./steampy-plus-bargain-scan.js";
 import { createSteamPyBuyerController } from "./steampy-plus-buyer.js";
 import { createSteamPyLowestListingPriceController } from "./steampy-plus-lowest-listing-price.js";
 import { createSteamPyPriceFilter } from "./steampy-plus-filter.js";
@@ -46,8 +47,13 @@ export function startSteamPyPlus({ ajaxHooker, elmGetter, jQuery }) {
     shouldShow: filter.shouldShow,
   });
   lowestListingPrice.registerMenu();
+  const bargainScan = createSteamPyBargainScanController({
+    client: xbootClient,
+    shouldShow: filter.shouldShow,
+  });
   buyer = createSteamPyBuyerController({
     advancedFilter,
+    bargainScan,
     elmGetter,
     jQuery,
     filter,

@@ -127,6 +127,7 @@ function findVue3BuyerVm({ silent = false } = {}) {
 
 export function createSteamPyBuyerController({
   advancedFilter,
+  bargainScan = null,
   elmGetter,
   jQuery,
   filter,
@@ -155,6 +156,7 @@ export function createSteamPyBuyerController({
     if (!legacyVm) legacyVm = jQuery(".game_layout .game_layout").get(0)?.__vue__ || null;
     if (!legacyVm) return;
     lowestListingPrice?.clearMarkers();
+    bargainScan?.clearMarkers();
     applySavedFilter(legacyVm, filter.shouldShow);
     legacyVm.$nextTick?.(() => processCards(legacyVm));
   }
@@ -228,6 +230,7 @@ export function createSteamPyBuyerController({
     if (!proVm) proVm = findVue3BuyerVm({ silent: true });
     if (!proVm) return;
     lowestListingPrice?.clearMarkers();
+    bargainScan?.clearMarkers();
     applySavedFilter(proVm, filter.shouldShow);
     scheduleProPageSizeMount(proVm);
     proVm.$nextTick?.(() => processCards(proVm));
@@ -238,6 +241,7 @@ export function createSteamPyBuyerController({
     await elmGetter.get("div.ivu-tabs-content div.flex-row.jc-space-flex-start.flex-wrap.w-auto");
     legacyVm = jQuery(".game_layout .game_layout").get(0)?.__vue__ || null;
     lowestListingPrice?.start(legacyVm);
+    bargainScan?.start(legacyVm);
     const tabPane = jQuery(".ivu-tabs-tabpane").get(0);
     addUpdatedHook(tabPane, () => applyLegacy());
     setTimeout(() => applyLegacy(), 600);
@@ -284,6 +288,7 @@ export function createSteamPyBuyerController({
     initializeProPageSize(proVm);
     advancedFilter?.mount(proVm);
     lowestListingPrice?.start(proVm);
+    bargainScan?.start(proVm);
     applyPro();
     proStarted = true;
   }
@@ -295,6 +300,7 @@ export function createSteamPyBuyerController({
 
   function cleanupLegacy() {
     lowestListingPrice?.cleanup();
+    bargainScan?.cleanup();
     legacyVm = null;
     legacyStarted = false;
   }
@@ -303,6 +309,7 @@ function cleanupPro() {
     proStartGeneration += 1;
     advancedFilter?.cleanup();
     lowestListingPrice?.cleanup();
+    bargainScan?.cleanup();
     if (proVm?.__steampyPlusUnwatch) proVm.__steampyPlusUnwatch();
     if (proVm) proVm.__steampyPlusWatcherInstalled = false;
     removeProBuyerPageSizeControl();

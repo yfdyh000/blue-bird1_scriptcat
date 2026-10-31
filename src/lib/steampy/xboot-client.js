@@ -206,6 +206,11 @@ export function createSteampyXbootClient(options = {}) {
     return requestJson(buildSearchUrl("/xboot/steamGame/searchByAppId", { appId }));
   }
 
+  async function fetchSteamGameDetail({ region = "cn", gameId }) {
+    const endpoints = getKeySaleEndpoints(region);
+    return requestJson(buildSearchUrl(`${endpoints.game}/getOne`, { gameId }));
+  }
+
   async function fetchKeySaleList({ region = "cn", gameId, pageNumber = 1, pageSize = 20 }) {
     const endpoints = getKeySaleEndpoints(region);
     return requestJson(buildSearchUrl(`${endpoints.keySale}/listSale`, {
@@ -255,6 +260,7 @@ export function createSteampyXbootClient(options = {}) {
     fetchSteamAppList,
     fetchSteamGameKeyHot,
     fetchSteamGameByAppId,
+    fetchSteamGameDetail,
     startKeySale,
     requestJson,
   };
