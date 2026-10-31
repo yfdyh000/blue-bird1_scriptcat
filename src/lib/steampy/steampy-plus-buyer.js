@@ -129,6 +129,7 @@ export function createSteamPyBuyerController({
   advancedFilter,
   bargainScan = null,
   elmGetter,
+  gameTracker = null,
   jQuery,
   filter,
   rating,
@@ -149,6 +150,10 @@ export function createSteamPyBuyerController({
       vm?.gameList,
       vm?.__steamPyPlusOriginalGameList,
       vm?.areas,
+    );
+    gameTracker?.processCards(
+      vm?.$el?.querySelectorAll(".gameblock") ?? [],
+      vm?.gameList,
     );
   }
 

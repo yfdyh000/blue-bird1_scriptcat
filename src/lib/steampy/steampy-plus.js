@@ -14,6 +14,7 @@ import {
 } from "./steampy-plus-seller-batch.js";
 import { createSteamPySellerController } from "./steampy-plus-seller.js";
 import { createSteamLibraryManager } from "./steam-library.js";
+import { createSteamPyGameTrackerController } from "./game-tracker.js";
 import { createSteampyXbootClient } from "./xboot-client.js";
 
 const LEGACY_BUYER_PATH = "/cdKey/cdKey";
@@ -51,10 +52,18 @@ export function startSteamPyPlus({ ajaxHooker, elmGetter, jQuery }) {
     client: xbootClient,
     shouldShow: filter.shouldShow,
   });
+  const gameTracker = createSteamPyGameTrackerController({
+    client: xbootClient,
+    libraryManager,
+    onStatusChange() {
+      buyer?.applyCurrent(location.pathname);
+    },
+  });
   buyer = createSteamPyBuyerController({
     advancedFilter,
     bargainScan,
     elmGetter,
+    gameTracker,
     jQuery,
     filter,
     rating,
@@ -70,6 +79,7 @@ export function startSteamPyPlus({ ajaxHooker, elmGetter, jQuery }) {
 
   installSteamPyAjaxHooks({ ajaxHooker, jQuery, onHotGames: rating.setHotGameData });
   libraryManager.registerMenus();
+  gameTracker.registerMenus();
   elmGetter.selector(jQuery);
 
   let legacyActive = false;
