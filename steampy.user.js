@@ -1044,8 +1044,13 @@
   var FILTER_ANCHOR_SELECTOR3 = ".tag.flex-row.align-items-center";
   var GAME_BLOCK_SELECTOR2 = ".gameblock";
   var QUERY_CONCURRENCY2 = 2;
-  var QUERY_INTERVAL_MIN_MS2 = 600;
-  var QUERY_INTERVAL_MAX_MS2 = 1200;
+  var BARGAIN_SCAN_SPEED_KEY = "steamPyPlusBargainSpeed";
+  var BARGAIN_SCAN_SPEED_INPUT_ID = "steamPyPlusBargainSpeedInput";
+  var SPEED_PRESETS = Object.freeze({
+    fast: { min: 200, max: 400, label: "快速" },
+    normal: { min: 400, max: 800, label: "标准" },
+    safe: { min: 800, max: 1600, label: "保守" }
+  });
   var RATE_LIMIT_PATTERN = /频繁|限流|请求过快|too many|429/i;
   var TRACKER_MARK_LABELS = Object.freeze({ ignored: "忽略", owned: "已有" });
   var BARGAIN_SCAN_USE_FILTER_KEY = "steamPyPlusBargainUseFilter";
@@ -1153,6 +1158,7 @@
     let amountCapInput = null;
     let pageCountInput = null;
     let useFilterCheckbox = null;
+    let speedSelect = null;
     let panel = null;
     let querying = false;
     let rateLimited = false;
@@ -1454,6 +1460,8 @@
       activeRequestCount = 0;
       renderProgress(0, firstPageCount);
       const useFilter = useFilterCheckbox?.checked !== false;
+      const activeSpeed = speedSelect?.value || getValue?.(BARGAIN_SCAN_SPEED_KEY, "normal") || "normal";
+      const speedPreset = SPEED_PRESETS[activeSpeed] || SPEED_PRESETS.normal;
       let games = firstPageGames;
       if (pageCount > 1 && client?.fetchSteamGameKeyHot) {
         const searchForm = vm?.searchForm || {};
@@ -1471,7 +1479,7 @@
           } catch {
             break;
           }
-          await waitFor2(QUERY_INTERVAL_MIN_MS2);
+          await waitFor2(speedPreset.min);
         }
         games = collected;
       }
@@ -1523,7 +1531,7 @@
           if (index < firstPageCount) renderMarker(index, result);
           if (client?.isTokenInvalid?.()) querying = false;
           if (querying && !rateLimited) {
-            const delay = QUERY_INTERVAL_MIN_MS2 + Math.random() * (QUERY_INTERVAL_MAX_MS2 - QUERY_INTERVAL_MIN_MS2);
+            const delay = speedPreset.min + Math.random() * (speedPreset.max - speedPreset.min);
             await waitFor2(delay);
           }
         }
@@ -1550,6 +1558,7 @@
       setValue?.("steamPyPlusBargainAmountCap", amountCapInput?.value ?? "");
       setValue?.("steamPyPlusBargainPageCount", pageCountInput?.value ?? "");
       setValue?.(BARGAIN_SCAN_USE_FILTER_KEY, useFilterCheckbox?.checked ? "1" : "0");
+      setValue?.(BARGAIN_SCAN_SPEED_KEY, speedSelect?.value || "normal");
     }
     function restoreInputs() {
       const minNormal = getValue?.("steamPyPlusBargainMinNormalPrice", String(DEFAULT_MIN_NORMAL_PRICE));
@@ -1563,6 +1572,7 @@
       if (amountCapInput) amountCapInput.value = String(amountCap ?? "");
       if (pageCountInput) pageCountInput.value = String(pageCount ?? "");
       if (useFilterCheckbox) useFilterCheckbox.checked = getValue?.(BARGAIN_SCAN_USE_FILTER_KEY, "1") !== "0";
+      if (speedSelect) speedSelect.value = getValue?.(BARGAIN_SCAN_SPEED_KEY, "normal") || "normal";
     }
     function createConfigInput(id, type, placeholder, title, style) {
       const input = document.createElement("input");
@@ -1598,12 +1608,23 @@
       ratioInput = createConfigInput(BARGAIN_SCAN_RATIO_INPUT_ID, "number", "20", "当前最低挂单价不高于历史均价的该百分比即命中（默认 20%）", inputStyle);
       amountCapInput = createConfigInput(BARGAIN_SCAN_AMOUNT_CAP_INPUT_ID, "number", "留空", "当前最低挂单价不高于该金额即命中（可留空）", inputStyle);
       pageCountInput = createConfigInput(BARGAIN_SCAN_PAGE_COUNT_INPUT_ID, "number", "1", "扫描的游戏页数，留空为 1（仅当前页）", inputStyle);
+      speedSelect = document.createElement("select");
+      speedSelect.id = BARGAIN_SCAN_SPEED_INPUT_ID;
+      speedSelect.title = "请求间隔档位：快速较快但有风控风险，标准兼顾速度与安全，保守最安全";
+      speedSelect.style.cssText = inputStyle;
+      Object.entries(SPEED_PRESETS).forEach(([value, preset]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = `${preset.label}（${preset.min}-${preset.max}ms）`;
+        speedSelect.append(option);
+      });
       fields.append(
         makeField("平时价下限（元）", minNormalInput),
         makeField("绝对低价（元）", absLowInput),
         makeField("折扣比率（%）", ratioInput),
         makeField("额度上限（元，可空）", amountCapInput),
-        makeField("扫描页数", pageCountInput)
+        makeField("扫描页数", pageCountInput),
+        makeField("请求速度", speedSelect)
       );
       const hint = document.createElement("p");
       hint.style.cssText = "margin:.1rem 0 0;font-size:.12rem;color:#999;";
@@ -1621,7 +1642,7 @@
       reset.type = "button";
       reset.className = "ivu-btn ivu-btn-default ivu-btn-sm";
       reset.textContent = "重置默认值";
-      reset.title = "将参数恢复为默认：平时价下限 0.6、绝对低价 0.1、折扣比率 20%、额度上限留空、页数 1";
+      reset.title = "将参数恢复为默认：平时价下限 0.6、绝对低价 0.1、折扣比率 20%、额度上限留空、页数 1、请求速度标准";
       reset.style.cssText = "margin-right:auto;";
       reset.addEventListener("click", () => {
         if (minNormalInput) minNormalInput.value = String(DEFAULT_MIN_NORMAL_PRICE);
@@ -1630,6 +1651,7 @@
         if (amountCapInput) amountCapInput.value = "";
         if (pageCountInput) pageCountInput.value = "1";
         if (useFilterCheckbox) useFilterCheckbox.checked = true;
+        if (speedSelect) speedSelect.value = "normal";
         persistInputs();
       });
       const cancel = document.createElement("button");
