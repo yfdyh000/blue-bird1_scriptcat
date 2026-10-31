@@ -17,6 +17,7 @@ const QUERY_INTERVAL_MIN_MS = 600;
 const QUERY_INTERVAL_MAX_MS = 1200;
 const RATE_LIMIT_PATTERN = /频繁|限流|请求过快|too many|429/i;
 const TRACKER_MARK_LABELS = Object.freeze({ ignored: "忽略", owned: "已有" });
+const BARGAIN_SCAN_USE_FILTER_KEY = "steamPyPlusBargainUseFilter";
 const DEFAULT_MIN_NORMAL_PRICE = 0.6;
 const DEFAULT_ABS_LOW_PRICE = 0.1;
 const DEFAULT_DISCOUNT_RATIO = 20;
@@ -133,6 +134,7 @@ export function createSteamPyBargainScanController({
   let ratioInput = null;
   let amountCapInput = null;
   let pageCountInput = null;
+  let useFilterCheckbox = null;
   let panel = null;
   let querying = false;
   let rateLimited = false;
@@ -284,7 +286,12 @@ export function createSteamPyBargainScanController({
       ? [...panel.querySelectorAll("tbody tr[data-hit='1']")].length
       : 0;
     const currentPage = Math.max(1, activeLastCheckedPage - activeBasePageNumber + 1);
-    element.textContent = `已处理 ${completed}/${total} · 命中 ${hitCount} · 第 ${currentPage}/${activePageCount} 页 · 请求 ${activeRequestCount}`;
+    const done = completed >= total && !rateLimited;
+    const prefix = rateLimited ? "⛔" : done ? "✓" : "⏳";
+    const color = rateLimited ? "#cb2634" : done ? "#16a34a" : "#2d8cf0";
+    element.textContent = `${prefix} 已处理 ${completed}/${total} · 命中 ${hitCount} · 第 ${currentPage}/${activePageCount} 页 · 请求 ${activeRequestCount}`;
+    element.style.color = color;
+    element.style.fontWeight = done || rateLimited ? "bold" : "normal";
   }
 
   function renderRow(index, game, result, region) {
@@ -449,6 +456,7 @@ export function createSteamPyBargainScanController({
     activeLastCheckedPage = activeBasePageNumber;
     activeRequestCount = 0;
     renderProgress(0, firstPageCount);
+    const useFilter = useFilterCheckbox?.checked !== false;
     let games = firstPageGames;
     if (pageCount > 1 && client?.fetchSteamGameKeyHot) {
       const searchForm = vm?.searchForm || {};
@@ -461,9 +469,9 @@ export function createSteamPyBargainScanController({
           activeLastCheckedPage = pageNumber;
           const pageGames = pageResponse?.content ?? pageResponse?.result?.content ?? [];
           if (!Array.isArray(pageGames) || pageGames.length === 0) break;
-          const usableGames = typeof shouldShow !== "function"
-            ? pageGames
-            : pageGames.filter((game) => shouldShow(game));
+          const usableGames = useFilter && typeof shouldShow === "function"
+            ? pageGames.filter((game) => shouldShow(game))
+            : pageGames;
           if (usableGames.length > 0) collected.push(...usableGames);
         } catch {
           break;
@@ -551,6 +559,7 @@ export function createSteamPyBargainScanController({
     setValue?.("steamPyPlusBargainDiscountRatio", ratioInput?.value ?? "");
     setValue?.("steamPyPlusBargainAmountCap", amountCapInput?.value ?? "");
     setValue?.("steamPyPlusBargainPageCount", pageCountInput?.value ?? "");
+    setValue?.(BARGAIN_SCAN_USE_FILTER_KEY, useFilterCheckbox?.checked ? "1" : "0");
   }
 
   function restoreInputs() {
@@ -564,6 +573,7 @@ export function createSteamPyBargainScanController({
     if (ratioInput) ratioInput.value = String(ratio ?? "");
     if (amountCapInput) amountCapInput.value = String(amountCap ?? "");
     if (pageCountInput) pageCountInput.value = String(pageCount ?? "");
+    if (useFilterCheckbox) useFilterCheckbox.checked = getValue?.(BARGAIN_SCAN_USE_FILTER_KEY, "1") !== "0";
   }
 
   function createConfigInput(id, type, placeholder, title, style) {
@@ -611,6 +621,13 @@ export function createSteamPyBargainScanController({
     const hint = document.createElement("p");
     hint.style.cssText = "margin:.1rem 0 0;font-size:.12rem;color:#999;";
     hint.textContent = "“平时价”指 SteamPy 历史平均成交价（keyAveAmt），来自游戏详情，不是 Steam 原价；“当前价”指 SteamPy 当前最低挂单价（keyTxAmt）。命中条件：keyAveAmt ≥ 平时价下限，且当前价 ≤ 绝对低价，或 ≤ keyAveAmt × 折扣比率，或 ≤ 额度上限（三者满足任一）。";
+    const filterOption = document.createElement("label");
+    filterOption.style.cssText = "display:flex;align-items:center;gap:.05rem;margin:.08rem 0 0;font-size:.12rem;color:#17233d;cursor:pointer;";
+    useFilterCheckbox = document.createElement("input");
+    useFilterCheckbox.type = "checkbox";
+    useFilterCheckbox.title = "跨页扫描时遵循当前 DLC/价格/已拥有过滤，减少无效请求（默认开启）";
+    useFilterCheckbox.style.cssText = "margin:0;cursor:pointer;";
+    filterOption.append(useFilterCheckbox, document.createTextNode("遵循当前 DLC/价格筛选（减少请求）"));
     const actions = document.createElement("div");
     actions.style.cssText = "display:flex;align-items:center;gap:.1rem;margin-top:.16rem;";
     const reset = document.createElement("button");
@@ -625,6 +642,7 @@ export function createSteamPyBargainScanController({
       if (ratioInput) ratioInput.value = String(DEFAULT_DISCOUNT_RATIO);
       if (amountCapInput) amountCapInput.value = "";
       if (pageCountInput) pageCountInput.value = "1";
+      if (useFilterCheckbox) useFilterCheckbox.checked = true;
       persistInputs();
     });
     const cancel = document.createElement("button");
@@ -638,7 +656,7 @@ export function createSteamPyBargainScanController({
     start.textContent = "开始扫描";
     start.addEventListener("click", runScan);
     actions.append(reset, cancel, start);
-    dialog.append(title, fields, hint, actions);
+    dialog.append(title, fields, hint, filterOption, actions);
     overlay.append(dialog);
     overlay.addEventListener("click", (event) => {
       if (event.target === overlay) closeConfigPanel();
