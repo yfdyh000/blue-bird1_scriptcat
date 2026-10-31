@@ -27,6 +27,7 @@ export function startSteamPyPlus({ ajaxHooker, elmGetter, jQuery }) {
   const libraryManager = createSteamLibraryManager({
     onChange() {
       buyer?.applyCurrent(location.pathname);
+      gameTracker?.autoImportFromSteamLibrary();
     },
   });
   const rating = createSteamPyRatingEnhancer({ libraryManager });
@@ -80,6 +81,7 @@ export function startSteamPyPlus({ ajaxHooker, elmGetter, jQuery }) {
   installSteamPyAjaxHooks({ ajaxHooker, jQuery, onHotGames: rating.setHotGameData });
   libraryManager.registerMenus();
   gameTracker.registerMenus();
+  gameTracker.autoImportFromSteamLibrary();
   elmGetter.selector(jQuery);
 
   let legacyActive = false;

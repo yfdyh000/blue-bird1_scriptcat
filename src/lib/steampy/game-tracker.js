@@ -207,14 +207,7 @@ export function createSteamPyGameTrackerController({
     return statusOf(records, gameInfo);
   }
 
-  async function importFromSteamLibrary() {
-    if (!libraryManager) return 0;
-    let state = libraryManager.getState();
-    if (typeof libraryManager.sync === "function") {
-      const synced = await libraryManager.sync();
-      if (synced) state = synced;
-    }
-    const records = loadRecords();
+  function importSteamRecordsSilently(records, state) {
     let added = 0;
     const addMissing = (appIds, status, source) => {
       appIds.forEach((appId) => {
@@ -237,6 +230,26 @@ export function createSteamPyGameTrackerController({
     addMissing(state.wish || [], "wanted", "steam-wishlist");
     addMissing(state.own || [], "owned", "steam-owned");
     addMissing(state.ignored || [], "ignored", "steam-ignored");
+    return added;
+  }
+
+  function autoImportFromSteamLibrary() {
+    if (!libraryManager) return 0;
+    const records = loadRecords();
+    const added = importSteamRecordsSilently(records, libraryManager.getState());
+    if (added > 0) saveRecords(records);
+    return added;
+  }
+
+  async function importFromSteamLibrary() {
+    if (!libraryManager) return 0;
+    let state = libraryManager.getState();
+    if (typeof libraryManager.sync === "function") {
+      const synced = await libraryManager.sync();
+      if (synced) state = synced;
+    }
+    const records = loadRecords();
+    const added = importSteamRecordsSilently(records, state);
     if (added > 0) {
       saveRecords(records);
       notify(`已从 Steam 导入 ${added} 个游戏`);
@@ -246,13 +259,16 @@ export function createSteamPyGameTrackerController({
     return added;
   }
 
-  async function resolveMissingNames(records) {
+  async function resolveMissingNames(records, { limit = 100 } = {}) {
     if (!client?.fetchSteamGameByAppId) return records;
     const next = records.slice();
     let changed = false;
+    let resolved = 0;
     for (let index = 0; index < next.length; index += 1) {
       const record = next[index];
       if (record.name || !record.appId) continue;
+      if (resolved >= limit) break;
+      resolved += 1;
       try {
         const result = await client.fetchSteamGameByAppId(record.appId);
         const item = result?.content?.[0];
@@ -561,7 +577,6 @@ export function createSteamPyGameTrackerController({
   async function openPanel() {
     if (panel) return;
     ensureStyle();
-    await resolveMissingNames(getRecords());
     const overlay = createElement("div", {
       attributes: { [TRACKER_PANEL_ID]: "true", role: "dialog", "aria-modal": "true" },
     });
@@ -634,13 +649,17 @@ export function createSteamPyGameTrackerController({
       style: "min-height:32px;padding:0 14px;border:1px solid #c9cdd4;border-radius:5px;background:#fff;cursor:pointer;font-size:13px;",
     });
     jsonButton.addEventListener("click", () => exportJson(getRecords()));
+    const note = createElement("p", {
+      text: "“同步 Steam”会把 Steam 愿望单/已拥有/已忽略导入为清单记录（想买/已有/忽略），不覆盖手动标记；Steam 数据同步后清单会自动导入。",
+    });
+    note.style.cssText = "margin:0;font-size:12px;color:#86909c;";
     actions.append(syncButton, csvButton, jsonButton);
 
     const body = createElement("div", {
       attributes: { "data-steam-py-plus-tracker-body": "true" },
       style: "flex:1;display:flex;flex-direction:column;min-height:0;",
     });
-    dialog.append(header, actions, body);
+    dialog.append(header, actions, note, body);
     overlay.append(dialog);
     overlay.addEventListener("click", (event) => {
       if (event.target === overlay) closePanel();
@@ -655,15 +674,18 @@ export function createSteamPyGameTrackerController({
     panel = overlay;
     searchInput.focus();
     renderPanelBody();
+    void resolveMissingNames(getRecords(), { limit: 100 }).then(() => {
+      if (panel) renderPanelBody();
+    });
   }
 
   function registerMenus() {
     if (menusRegistered || typeof GM_registerMenuCommand !== "function") return;
     menusRegistered = true;
-    GM_registerMenuCommand("打开游戏清单", openPanel);
-    GM_registerMenuCommand("从 Steam 同步游戏清单", importFromSteamLibrary);
-    GM_registerMenuCommand("导出游戏清单 CSV", () => exportCsv(getRecords()));
-    GM_registerMenuCommand("导出游戏清单 JSON", () => exportJson(getRecords()));
+    GM_registerMenuCommand("打开游戏清单（查看/搜索/标记/导出）", openPanel);
+    GM_registerMenuCommand("游戏清单：从 Steam 导入（想买/已拥有/已忽略）", importFromSteamLibrary);
+    GM_registerMenuCommand("游戏清单：导出 CSV", () => exportCsv(getRecords()));
+    GM_registerMenuCommand("游戏清单：导出 JSON", () => exportJson(getRecords()));
   }
 
   function cleanup() {
@@ -671,6 +693,7 @@ export function createSteamPyGameTrackerController({
   }
 
   return {
+    autoImportFromSteamLibrary,
     cleanup,
     importFromSteamLibrary,
     openPanel,
