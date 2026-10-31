@@ -566,8 +566,8 @@ export function createSteamPyLowestListingPriceController({
     button.id = LOWEST_LISTING_BUTTON_ID;
     button.type = "button";
     button.className = "ivu-btn ivu-btn-default ivu-btn-sm";
-    button.textContent = "查看低价";
-    button.title = "查看游戏是否有符合条件的有库存挂单：挂单价需不低于“满减门槛”，且不超过“门槛+自付上限”（自付可留空表示不设上限）。结果标注在卡片上并以面板列出。";
+    button.textContent = "满减挂单";
+    button.title = "查找挂单价达到“满减门槛”、用券后自付不超“门槛+自付上限”的有库存挂单（自付可留空表示不设上限）。结果标注在卡片上并以面板列出。";
     button.style.cssText = "margin-left:.08rem;";
     button.addEventListener("click", startQuery);
     anchor.append(thresholdInput, maxOutOfPocketInput, button, pageCountInput);

@@ -998,8 +998,8 @@
       button.id = LOWEST_LISTING_BUTTON_ID;
       button.type = "button";
       button.className = "ivu-btn ivu-btn-default ivu-btn-sm";
-      button.textContent = "查看低价";
-      button.title = "查看游戏是否有符合条件的有库存挂单：挂单价需不低于“满减门槛”，且不超过“门槛+自付上限”（自付可留空表示不设上限）。结果标注在卡片上并以面板列出。";
+      button.textContent = "满减挂单";
+      button.title = "查找挂单价达到“满减门槛”、用券后自付不超“门槛+自付上限”的有库存挂单（自付可留空表示不设上限）。结果标注在卡片上并以面板列出。";
       button.style.cssText = "margin-left:.08rem;";
       button.addEventListener("click", startQuery);
       anchor.append(thresholdInput, maxOutOfPocketInput, button, pageCountInput);
@@ -1090,7 +1090,20 @@
     if (!Number.isFinite(priceNumber) || !Number.isFinite(averageNumber) || averageNumber <= 0) return "--";
     return `${(priceNumber / averageNumber * 100).toFixed(1)}%`;
   }
-  function steamRatingLabel(rating) {
+  function steamRatingLabel(rating, reviewScoreDesc) {
+    const desc = String(reviewScoreDesc || "").trim();
+    if (desc) {
+      const descColor = {
+        "好评如潮": "#0a7d33",
+        "特别好评": "#16a34a",
+        "多半好评": "#2f86eb",
+        "褒贬不一": "#e69f00",
+        "多半差评": "#d55e00",
+        "差评如潮": "#8c8c8c",
+        "无用户评测": "#999"
+      };
+      return { label: desc, color: descColor[desc] || "#999" };
+    }
     const value = Number(rating);
     if (!Number.isFinite(value) || value <= 0) return { label: "--", color: "#999" };
     if (value >= 0.95) return { label: "好评如潮", color: "#0a7d33" };
@@ -1205,7 +1218,7 @@
       header.style.cssText = "display:flex;align-items:center;justify-content:space-between;";
       const title = document.createElement("h3");
       title.style.cssText = "margin:0;font-size:.18rem;";
-      title.textContent = "低价挂单扫描";
+      title.textContent = "捡漏扫描";
       const close = document.createElement("button");
       close.type = "button";
       close.className = "ivu-btn ivu-btn-default ivu-btn-sm";
@@ -1309,10 +1322,14 @@
         steamLink.style.cssText = "margin-left:auto;font-size:.11rem;text-decoration:none;color:#1a9fff;";
         name.append(steamLink);
       }
-      const ratingInfo = steamRatingLabel(game?.rating);
+      const totalReviews = Number(game?.steamApp?.totalReviews);
+      const ratingInfo = steamRatingLabel(game?.rating, game?.steamApp?.reviewScoreDesc);
       const rating = document.createElement("td");
       rating.style.cssText = `padding:.06rem .1rem;border:1px solid #e8eaec;color:${ratingInfo.color};font-size:.12rem;white-space:nowrap;font-weight:bold;`;
       rating.textContent = ratingInfo.label;
+      if (Number.isFinite(totalReviews) && totalReviews > 0) {
+        rating.title = `${totalReviews} 篇评测`;
+      }
       const average = document.createElement("td");
       average.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;";
       average.textContent = formatPrice2(game?.keyAveAmt);
@@ -1525,7 +1542,7 @@
       dialog.style.cssText = "width:min(5.2rem,92vw);padding:.2rem;border-radius:.08rem;background:#fff;color:#17233d;box-sizing:border-box;";
       const title = document.createElement("h3");
       title.style.cssText = "margin:0 0 .16rem;font-size:.18rem;";
-      title.textContent = "低价扫描参数";
+      title.textContent = "捡漏扫描参数";
       const fieldStyle = "display:flex;align-items:center;justify-content:space-between;gap:.1rem;margin-bottom:.1rem;font-size:.13rem;";
       const inputStyle = "width:2.4rem;height:.3rem;padding:0 .08rem;border:1px solid #dcdee2;border-radius:.04rem;font-size:.13rem;color:#17233d;box-sizing:border-box;";
       const fields = document.createElement("div");
@@ -1609,7 +1626,7 @@
       button.id = BARGAIN_SCAN_BUTTON_ID;
       button.type = "button";
       button.className = "ivu-btn ivu-btn-default ivu-btn-sm";
-      button.textContent = "低价扫描";
+      button.textContent = "捡漏扫描";
       button.title = "找出平时价格不低、但现在出现明显低价挂单的游戏：历史均价需不低于“平时价”，且当前最低挂单价低于绝对价、比率或额度门限之一。";
       button.style.cssText = "margin-left:.08rem;";
       button.addEventListener("click", openConfigPanel);
