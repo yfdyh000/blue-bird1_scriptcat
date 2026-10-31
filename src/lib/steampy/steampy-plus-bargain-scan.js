@@ -150,6 +150,8 @@ export function createSteamPyBargainScanController({
   let activeBasePageNumber = 1;
   let activeRequestCount = 0;
   let closeWaiters = [];
+  let activeSortColumn = null;
+  let activeSortOrder = "asc";
 
   function gameList() {
     return Array.isArray(vm?.gameList) ? vm.gameList : [];
@@ -255,10 +257,18 @@ export function createSteamPyBargainScanController({
     const thead = document.createElement("thead");
     const headRow = document.createElement("tr");
     headRow.style.cssText = "background:#f5f7fa;";
-    [["游戏", ""], ["评价", ""], ["平时价", ""], ["当前价", ""], ["折扣", ""], ["状态", ""]].forEach(([text]) => {
+    [["游戏", "name"], ["评价", "rating"], ["平时价", "average"], ["当前价", "price"], ["折扣", "ratio"], ["状态", "status"]].forEach(([text, key]) => {
       const th = document.createElement("th");
-      th.textContent = text;
-      th.style.cssText = "padding:.08rem .1rem;border:1px solid #e8eaec;text-align:left;";
+      th.dataset.sortKey = key;
+      th.title = `点击按“${text}”排序`;
+      th.style.cssText = "padding:.08rem .1rem;border:1px solid #e8eaec;text-align:left;cursor:pointer;user-select:none;";
+      const span = document.createElement("span");
+      span.textContent = text;
+      const arrow = document.createElement("span");
+      arrow.dataset.sortArrow = key;
+      arrow.style.cssText = "margin-left:.04rem;font-size:.1rem;color:#2d8cf0;";
+      th.append(span, arrow);
+      th.addEventListener("click", () => toggleSort(key));
       headRow.append(th);
     });
     thead.append(headRow);
@@ -283,6 +293,44 @@ export function createSteamPyBargainScanController({
       const hit = row.dataset.hit === "1";
       row.style.display = onlyHit && !hit ? "none" : "";
     });
+  }
+
+  function updateSortArrows() {
+    panel?.querySelectorAll("[data-sort-arrow]").forEach((arrow) => {
+      const key = arrow.dataset.sortArrow;
+      arrow.textContent = activeSortColumn === key ? (activeSortOrder === "asc" ? "▲" : "▼") : "";
+    });
+  }
+
+  function toggleSort(key) {
+    if (activeSortColumn === key) {
+      activeSortOrder = activeSortOrder === "asc" ? "desc" : "asc";
+    } else {
+      activeSortColumn = key;
+      activeSortOrder = "asc";
+    }
+    updateSortArrows();
+    sortTableRows();
+  }
+
+  function sortTableRows() {
+    if (!panel || !activeSortColumn) return;
+    const tbody = panel.querySelector("tbody");
+    const rows = [...tbody.children];
+    const key = activeSortColumn;
+    const dataKey = `sort${key.charAt(0).toUpperCase()}${key.slice(1)}`;
+    rows.sort((first, second) => {
+      const firstValue = Number(first.dataset[dataKey]);
+      const secondValue = Number(second.dataset[dataKey]);
+      let comparison;
+      if (Number.isFinite(firstValue) && Number.isFinite(secondValue)) {
+        comparison = firstValue - secondValue;
+      } else {
+        comparison = String(first.dataset[dataKey] ?? "").localeCompare(String(second.dataset[dataKey] ?? ""));
+      }
+      return activeSortOrder === "asc" ? comparison : -comparison;
+    });
+    rows.forEach((row) => tbody.append(row));
   }
 
   function renderProgress(completed, total) {
@@ -310,6 +358,14 @@ export function createSteamPyBargainScanController({
     }
     row.replaceChildren();
     row.dataset.hit = result.hit ? "1" : "0";
+    row.dataset.sortName = gameNameOf(game);
+    row.dataset.sortRating = Number(game?.rating) || 0;
+    row.dataset.sortAverage = Number(game?.keyAveAmt) || 0;
+    row.dataset.sortPrice = Number(game?.keyTxAmt ?? game?.keyPrice) || 0;
+    const averageForSort = Number(game?.keyAveAmt);
+    const priceForSort = Number(game?.keyTxAmt ?? game?.keyPrice);
+    row.dataset.sortRatio = averageForSort > 0 ? priceForSort / averageForSort : 999;
+    row.dataset.sortStatus = result.hit ? (result.scarce ? 0 : 1) : 2;
     row.style.display = "none";
     const name = document.createElement("td");
     name.style.cssText = "display:flex;align-items:center;padding:.06rem .1rem;border:1px solid #e8eaec;";

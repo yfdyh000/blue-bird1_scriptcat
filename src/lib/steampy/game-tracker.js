@@ -736,7 +736,6 @@ export function createSteamPyGameTrackerController({
     if (menusRegistered || typeof GM_registerMenuCommand !== "function") return;
     menusRegistered = true;
     GM_registerMenuCommand("打开游戏清单（查看/搜索/标记/导出）", openPanel);
-    GM_registerMenuCommand("游戏清单：从 Steam 导入（想买/已拥有/已忽略）", importFromSteamLibrary);
     GM_registerMenuCommand("游戏清单：导出 CSV", () => exportCsv(getRecords()));
     GM_registerMenuCommand("游戏清单：导出 JSON", () => exportJson(getRecords()));
   }
