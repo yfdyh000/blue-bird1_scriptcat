@@ -1047,6 +1047,7 @@
   var QUERY_INTERVAL_MIN_MS2 = 600;
   var QUERY_INTERVAL_MAX_MS2 = 1200;
   var RATE_LIMIT_PATTERN = /频繁|限流|请求过快|too many|429/i;
+  var TRACKER_MARK_LABELS = Object.freeze({ ignored: "忽略", owned: "已有" });
   var DEFAULT_MIN_NORMAL_PRICE = 0.6;
   var DEFAULT_ABS_LOW_PRICE = 0.1;
   var DEFAULT_DISCOUNT_RATIO = 20;
@@ -1138,6 +1139,7 @@
   }
   function createSteamPyBargainScanController({
     client,
+    gameTracker = null,
     shouldShow = null,
     getValue = GM_getValue,
     setValue = GM_setValue
@@ -1345,13 +1347,40 @@
       ratio.textContent = formatRatio(priceNumber, averageNumber);
       const status = document.createElement("td");
       status.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;";
+      const statusText = document.createElement("div");
       if (result.hit) {
-        status.textContent = result.scarce ? "✓ 低价·少量" : "✓ 低价";
-        status.style.color = discountColor(ratioValue, priceNumber);
-        if (result.scarce) status.style.fontWeight = "bold";
+        statusText.textContent = result.scarce ? "✓ 低价·少量" : "✓ 低价";
+        statusText.style.color = discountColor(ratioValue, priceNumber);
+        if (result.scarce) statusText.style.fontWeight = "bold";
       } else {
-        status.textContent = result.reason || "未命中";
-        status.style.color = "#999";
+        statusText.textContent = result.reason || "未命中";
+        statusText.style.color = "#999";
+      }
+      status.append(statusText);
+      if (gameTracker) {
+        const actionRow = document.createElement("div");
+        actionRow.style.cssText = "margin-top:2px;display:flex;gap:2px;";
+        const gameInfo = { appId: game?.appId, gameId: gameIdOf(game), name: gameNameOf(game) };
+        const renderActions = () => {
+          actionRow.replaceChildren();
+          const current = gameTracker.getStatus(gameInfo);
+          ["ignored", "owned"].forEach((candidate) => {
+            const active = candidate === current;
+            const button2 = document.createElement("button");
+            button2.type = "button";
+            button2.textContent = TRACKER_MARK_LABELS[candidate];
+            button2.title = active ? `取消“${TRACKER_MARK_LABELS[candidate]}”标记` : `标记为${TRACKER_MARK_LABELS[candidate]}`;
+            button2.style.cssText = `font-size:10px;height:16px;line-height:16px;padding:0 3px;border:1px solid ${active ? "#2d8cf0" : "#c9cdd4"};border-radius:3px;background:${active ? "#2d8cf0" : "#fff"};color:${active ? "#fff" : "#666"};cursor:pointer;`;
+            button2.addEventListener("click", (event) => {
+              event.stopPropagation();
+              gameTracker.markGame(gameInfo, active ? null : candidate, { silent: true });
+              renderActions();
+            });
+            actionRow.append(button2);
+          });
+        };
+        renderActions();
+        status.append(actionRow);
       }
       row.append(name, rating, average, price, ratio, status);
       row.style.display = "";
@@ -3657,6 +3686,56 @@
       if (typeof onStatusChange === "function") onStatusChange();
       return statusOf(records, gameInfo);
     }
+    function getStatus(gameInfo) {
+      return statusOf(getRecords(), gameInfo);
+    }
+    function markGame(gameInfo, status, options = {}) {
+      const records = setRecordStatus(loadRecords(), gameInfo, status);
+      saveRecords(records);
+      if (!options.silent && typeof onStatusChange === "function") onStatusChange();
+      return statusOf(records, gameInfo);
+    }
+    function mountDetailPage() {
+      const gameNameEl = document.querySelector(".gameName.fw-b.ml-50");
+      if (!gameNameEl || gameNameEl.dataset.steamPyPlusTrackerDetailBound) return;
+      gameNameEl.dataset.steamPyPlusTrackerDetailBound = "true";
+      const gameName = gameNameEl.textContent.trim();
+      const params = new URLSearchParams(location.search);
+      const gameId = params.get("gameId");
+      const steamLink = document.querySelector('a[href*="store.steampowered.com/app/"]');
+      let appIdMatch = steamLink?.href?.match(/\/app\/(\d+)\//);
+      if (!appIdMatch) {
+        const textMatch = document.body?.innerText?.match(/store\.steampowered\.com\/app\/(\d+)/);
+        appIdMatch = textMatch || null;
+      }
+      const appId = appIdMatch ? Number(appIdMatch[1]) : null;
+      ensureStyle();
+      const bar = createElement2("span", {
+        style: "margin-left:6px;font-size:0;white-space:nowrap;"
+      });
+      const gameInfo = { appId, gameId, name: gameName };
+      const renderButtons = () => {
+        bar.replaceChildren();
+        const status = getStatus(gameInfo);
+        ["ignored", "owned"].forEach((candidate) => {
+          const active = candidate === status;
+          const button = createElement2("button", {
+            type: "button",
+            text: STATUS_LABELS[candidate],
+            title: active ? `取消“${STATUS_LABELS[candidate]}”标记` : `标记为${STATUS_LABELS[candidate]}`
+          });
+          button.style.cssText = `font-size:10px;height:16px;line-height:16px;padding:0 3px;margin-left:3px;border:1px solid ${active ? STATUS_STYLES[candidate].background : "#c9cdd4"};border-radius:3px;background:${active ? STATUS_STYLES[candidate].background : "#fff"};color:${active ? "#fff" : "#666"};cursor:pointer;vertical-align:middle;`;
+          button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            markGame(gameInfo, active ? null : candidate);
+            renderButtons();
+          });
+          bar.append(button);
+        });
+      };
+      renderButtons();
+      gameNameEl.append(bar);
+    }
     function importSteamRecordsSilently(records, state) {
       let added = 0;
       const addMissing = (appIds, status, source) => {
@@ -4119,7 +4198,10 @@
     return {
       autoImportFromSteamLibrary,
       cleanup,
+      getStatus,
       importFromSteamLibrary,
+      markGame,
+      mountDetailPage,
       openPanel,
       processCards,
       registerMenus
@@ -4412,16 +4494,17 @@
       shouldShow: filter.shouldShow
     });
     lowestListingPrice.registerMenu();
-    const bargainScan = createSteamPyBargainScanController({
-      client: xbootClient,
-      shouldShow: filter.shouldShow
-    });
     const gameTracker = createSteamPyGameTrackerController({
       client: xbootClient,
       libraryManager,
       onStatusChange() {
         buyer?.applyCurrent(location.pathname);
       }
+    });
+    const bargainScan = createSteamPyBargainScanController({
+      client: xbootClient,
+      gameTracker,
+      shouldShow: filter.shouldShow
     });
     buyer = createSteamPyBuyerController({
       advancedFilter,
@@ -4476,6 +4559,7 @@
     function handlePathChange() {
       const pathname = location.pathname;
       startBuyer(pathname);
+      gameTracker.mountDetailPage();
       if (pathname.startsWith(SELLER_PATH2) && !sellerActive) {
         seller.start();
         sellerActive = true;

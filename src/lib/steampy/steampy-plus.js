@@ -49,16 +49,17 @@ export function startSteamPyPlus({ ajaxHooker, elmGetter, jQuery }) {
     shouldShow: filter.shouldShow,
   });
   lowestListingPrice.registerMenu();
-  const bargainScan = createSteamPyBargainScanController({
-    client: xbootClient,
-    shouldShow: filter.shouldShow,
-  });
   const gameTracker = createSteamPyGameTrackerController({
     client: xbootClient,
     libraryManager,
     onStatusChange() {
       buyer?.applyCurrent(location.pathname);
     },
+  });
+  const bargainScan = createSteamPyBargainScanController({
+    client: xbootClient,
+    gameTracker,
+    shouldShow: filter.shouldShow,
   });
   buyer = createSteamPyBuyerController({
     advancedFilter,
@@ -118,6 +119,7 @@ export function startSteamPyPlus({ ajaxHooker, elmGetter, jQuery }) {
   function handlePathChange() {
     const pathname = location.pathname;
     startBuyer(pathname);
+    gameTracker.mountDetailPage();
     if (pathname.startsWith(SELLER_PATH) && !sellerActive) {
       seller.start();
       sellerActive = true;

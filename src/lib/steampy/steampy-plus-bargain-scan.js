@@ -16,6 +16,7 @@ const QUERY_CONCURRENCY = 2;
 const QUERY_INTERVAL_MIN_MS = 600;
 const QUERY_INTERVAL_MAX_MS = 1200;
 const RATE_LIMIT_PATTERN = /频繁|限流|请求过快|too many|429/i;
+const TRACKER_MARK_LABELS = Object.freeze({ ignored: "忽略", owned: "已有" });
 const DEFAULT_MIN_NORMAL_PRICE = 0.6;
 const DEFAULT_ABS_LOW_PRICE = 0.1;
 const DEFAULT_DISCOUNT_RATIO = 20;
@@ -120,6 +121,7 @@ function isRateLimitError(error) {
 
 export function createSteamPyBargainScanController({
   client,
+  gameTracker = null,
   shouldShow = null,
   getValue = GM_getValue,
   setValue = GM_setValue,
@@ -344,13 +346,40 @@ export function createSteamPyBargainScanController({
     ratio.textContent = formatRatio(priceNumber, averageNumber);
     const status = document.createElement("td");
     status.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;";
+    const statusText = document.createElement("div");
     if (result.hit) {
-      status.textContent = result.scarce ? "✓ 低价·少量" : "✓ 低价";
-      status.style.color = discountColor(ratioValue, priceNumber);
-      if (result.scarce) status.style.fontWeight = "bold";
+      statusText.textContent = result.scarce ? "✓ 低价·少量" : "✓ 低价";
+      statusText.style.color = discountColor(ratioValue, priceNumber);
+      if (result.scarce) statusText.style.fontWeight = "bold";
     } else {
-      status.textContent = result.reason || "未命中";
-      status.style.color = "#999";
+      statusText.textContent = result.reason || "未命中";
+      statusText.style.color = "#999";
+    }
+    status.append(statusText);
+    if (gameTracker) {
+      const actionRow = document.createElement("div");
+      actionRow.style.cssText = "margin-top:2px;display:flex;gap:2px;";
+      const gameInfo = { appId: game?.appId, gameId: gameIdOf(game), name: gameNameOf(game) };
+      const renderActions = () => {
+        actionRow.replaceChildren();
+        const current = gameTracker.getStatus(gameInfo);
+        ["ignored", "owned"].forEach((candidate) => {
+          const active = candidate === current;
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = TRACKER_MARK_LABELS[candidate];
+          button.title = active ? `取消“${TRACKER_MARK_LABELS[candidate]}”标记` : `标记为${TRACKER_MARK_LABELS[candidate]}`;
+          button.style.cssText = `font-size:10px;height:16px;line-height:16px;padding:0 3px;border:1px solid ${active ? "#2d8cf0" : "#c9cdd4"};border-radius:3px;background:${active ? "#2d8cf0" : "#fff"};color:${active ? "#fff" : "#666"};cursor:pointer;`;
+          button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            gameTracker.markGame(gameInfo, active ? null : candidate, { silent: true });
+            renderActions();
+          });
+          actionRow.append(button);
+        });
+      };
+      renderActions();
+      status.append(actionRow);
     }
     row.append(name, rating, average, price, ratio, status);
     row.style.display = "";

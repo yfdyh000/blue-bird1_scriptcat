@@ -207,6 +207,59 @@ export function createSteamPyGameTrackerController({
     return statusOf(records, gameInfo);
   }
 
+  function getStatus(gameInfo) {
+    return statusOf(getRecords(), gameInfo);
+  }
+
+  function markGame(gameInfo, status, options = {}) {
+    const records = setRecordStatus(loadRecords(), gameInfo, status);
+    saveRecords(records);
+    if (!options.silent && typeof onStatusChange === "function") onStatusChange();
+    return statusOf(records, gameInfo);
+  }
+
+  function mountDetailPage() {
+    const gameNameEl = document.querySelector(".gameName.fw-b.ml-50");
+    if (!gameNameEl || gameNameEl.dataset.steamPyPlusTrackerDetailBound) return;
+    gameNameEl.dataset.steamPyPlusTrackerDetailBound = "true";
+    const gameName = gameNameEl.textContent.trim();
+    const params = new URLSearchParams(location.search);
+    const gameId = params.get("gameId");
+    const steamLink = document.querySelector('a[href*="store.steampowered.com/app/"]');
+    let appIdMatch = steamLink?.href?.match(/\/app\/(\d+)\//);
+    if (!appIdMatch) {
+      const textMatch = document.body?.innerText?.match(/store\.steampowered\.com\/app\/(\d+)/);
+      appIdMatch = textMatch || null;
+    }
+    const appId = appIdMatch ? Number(appIdMatch[1]) : null;
+    ensureStyle();
+    const bar = createElement("span", {
+      style: "margin-left:6px;font-size:0;white-space:nowrap;",
+    });
+    const gameInfo = { appId, gameId, name: gameName };
+    const renderButtons = () => {
+      bar.replaceChildren();
+      const status = getStatus(gameInfo);
+      ["ignored", "owned"].forEach((candidate) => {
+        const active = candidate === status;
+        const button = createElement("button", {
+          type: "button",
+          text: STATUS_LABELS[candidate],
+          title: active ? `取消“${STATUS_LABELS[candidate]}”标记` : `标记为${STATUS_LABELS[candidate]}`,
+        });
+        button.style.cssText = `font-size:10px;height:16px;line-height:16px;padding:0 3px;margin-left:3px;border:1px solid ${active ? STATUS_STYLES[candidate].background : "#c9cdd4"};border-radius:3px;background:${active ? STATUS_STYLES[candidate].background : "#fff"};color:${active ? "#fff" : "#666"};cursor:pointer;vertical-align:middle;`;
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          markGame(gameInfo, active ? null : candidate);
+          renderButtons();
+        });
+        bar.append(button);
+      });
+    };
+    renderButtons();
+    gameNameEl.append(bar);
+  }
+
   function importSteamRecordsSilently(records, state) {
     let added = 0;
     const addMissing = (appIds, status, source) => {
@@ -695,7 +748,10 @@ export function createSteamPyGameTrackerController({
   return {
     autoImportFromSteamLibrary,
     cleanup,
+    getStatus,
     importFromSteamLibrary,
+    markGame,
+    mountDetailPage,
     openPanel,
     processCards,
     registerMenus,
