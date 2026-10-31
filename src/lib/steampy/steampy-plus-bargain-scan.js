@@ -423,6 +423,8 @@ export function createSteamPyBargainScanController({
     }
   }
 
+  let configPanel = null;
+
   function persistInputs() {
     setValue?.("steamPyPlusBargainMinNormalPrice", minNormalInput?.value ?? "");
     setValue?.("steamPyPlusBargainAbsLowPrice", absLowInput?.value ?? "");
@@ -444,9 +446,83 @@ export function createSteamPyBargainScanController({
     if (pageCountInput) pageCountInput.value = String(pageCount ?? "");
   }
 
-  function startQuery() {
+  function createConfigInput(id, type, placeholder, title, style) {
+    const input = document.createElement("input");
+    input.id = id;
+    input.type = type;
+    input.placeholder = placeholder;
+    input.title = title;
+    input.style.cssText = style;
+    return input;
+  }
+
+  function openConfigPanel() {
+    if (configPanel) return;
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position:fixed;z-index:10000;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.38);";
+    const dialog = document.createElement("section");
+    dialog.style.cssText = "width:min(5.2rem,92vw);padding:.2rem;border-radius:.08rem;background:#fff;color:#17233d;box-sizing:border-box;";
+    const title = document.createElement("h3");
+    title.style.cssText = "margin:0 0 .16rem;font-size:.18rem;";
+    title.textContent = "低价扫描参数";
+    const fieldStyle = "display:flex;align-items:center;justify-content:space-between;gap:.1rem;margin-bottom:.1rem;font-size:.13rem;";
+    const inputStyle = "width:2.4rem;height:.3rem;padding:0 .08rem;border:1px solid #dcdee2;border-radius:.04rem;font-size:.13rem;color:#17233d;box-sizing:border-box;";
+    const fields = document.createElement("div");
+    const makeField = (labelText, input) => {
+      const label = document.createElement("label");
+      label.style.cssText = fieldStyle;
+      const span = document.createElement("span");
+      span.textContent = labelText;
+      label.append(span, input);
+      return label;
+    };
+    minNormalInput = createConfigInput(BARGAIN_SCAN_MIN_NORMAL_INPUT_ID, "number", "0.6", "历史均价需达到该金额，排除本来就是低价的游戏（默认 0.6）", inputStyle);
+    absLowInput = createConfigInput(BARGAIN_SCAN_ABS_LOW_INPUT_ID, "number", "0.1", "当前最低挂单价低于该金额即命中（默认 0.1）", inputStyle);
+    ratioInput = createConfigInput(BARGAIN_SCAN_RATIO_INPUT_ID, "number", "20", "当前价不高于历史均价的该百分比即命中（默认 20%）", inputStyle);
+    amountCapInput = createConfigInput(BARGAIN_SCAN_AMOUNT_CAP_INPUT_ID, "number", "留空", "当前最低挂单价不高于该金额即命中（可留空）", inputStyle);
+    pageCountInput = createConfigInput(BARGAIN_SCAN_PAGE_COUNT_INPUT_ID, "number", "1", "扫描的游戏页数，留空为 1（仅当前页）", inputStyle);
+    fields.append(
+      makeField("平时价下限（元）", minNormalInput),
+      makeField("绝对低价（元）", absLowInput),
+      makeField("折扣比率（%）", ratioInput),
+      makeField("额度上限（元，可空）", amountCapInput),
+      makeField("扫描页数", pageCountInput),
+    );
+    const hint = document.createElement("p");
+    hint.style.cssText = "margin:.1rem 0 0;font-size:.12rem;color:#999;";
+    hint.textContent = "命中条件：历史均价不低于“平时价下限”，且当前最低挂单价低于“绝对低价”或“历史均价 × 折扣比率”或“额度上限”之一。";
+    const actions = document.createElement("div");
+    actions.style.cssText = "display:flex;justify-content:flex-end;gap:.1rem;margin-top:.16rem;";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "ivu-btn ivu-btn-default ivu-btn-sm";
+    cancel.textContent = "取消";
+    cancel.addEventListener("click", closeConfigPanel);
+    const start = document.createElement("button");
+    start.type = "button";
+    start.className = "ivu-btn ivu-btn-primary ivu-btn-sm";
+    start.textContent = "开始扫描";
+    start.addEventListener("click", runScan);
+    actions.append(cancel, start);
+    dialog.append(title, fields, hint, actions);
+    overlay.append(dialog);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeConfigPanel();
+    });
+    document.body.append(overlay);
+    configPanel = overlay;
+    restoreInputs();
+  }
+
+  function closeConfigPanel() {
+    configPanel?.remove();
+    configPanel = null;
+  }
+
+  function runScan() {
     if (querying) return;
     persistInputs();
+    closeConfigPanel();
     clearMarkers();
     panel = createPanel();
     runQuery();
@@ -457,53 +533,6 @@ export function createSteamPyBargainScanController({
     const anchor = document.querySelector(FILTER_ANCHOR_SELECTOR);
     if (!anchor) return false;
     document.getElementById(BARGAIN_SCAN_BUTTON_ID)?.remove();
-    document.getElementById(BARGAIN_SCAN_MIN_NORMAL_INPUT_ID)?.remove();
-    document.getElementById(BARGAIN_SCAN_ABS_LOW_INPUT_ID)?.remove();
-    document.getElementById(BARGAIN_SCAN_RATIO_INPUT_ID)?.remove();
-    document.getElementById(BARGAIN_SCAN_AMOUNT_CAP_INPUT_ID)?.remove();
-    document.getElementById(BARGAIN_SCAN_PAGE_COUNT_INPUT_ID)?.remove();
-    const inputStyle = "width:.7rem;height:.28rem;margin-left:.06rem;padding:0 .04rem;border:1px solid #dcdee2;border-radius:.04rem;font-size:.12rem;color:#17233d;box-sizing:border-box;vertical-align:middle;text-align:center;";
-    minNormalInput = document.createElement("input");
-    minNormalInput.id = BARGAIN_SCAN_MIN_NORMAL_INPUT_ID;
-    minNormalInput.type = "number";
-    minNormalInput.min = "0";
-    minNormalInput.step = "0.1";
-    minNormalInput.placeholder = "平时价≥";
-    minNormalInput.title = "历史均价需达到该金额，排除本来就是低价的游戏（默认 0.6）";
-    minNormalInput.style.cssText = inputStyle;
-    absLowInput = document.createElement("input");
-    absLowInput.id = BARGAIN_SCAN_ABS_LOW_INPUT_ID;
-    absLowInput.type = "number";
-    absLowInput.min = "0";
-    absLowInput.step = "0.01";
-    absLowInput.placeholder = "绝对价≤";
-    absLowInput.title = "当前最低挂单价低于该金额即命中（默认 0.1）";
-    absLowInput.style.cssText = inputStyle;
-    ratioInput = document.createElement("input");
-    ratioInput.id = BARGAIN_SCAN_RATIO_INPUT_ID;
-    ratioInput.type = "number";
-    ratioInput.min = "0";
-    ratioInput.step = "1";
-    ratioInput.placeholder = "比率%";
-    ratioInput.title = "当前价不高于历史均价的该百分比即命中（默认 20%）";
-    ratioInput.style.cssText = inputStyle;
-    amountCapInput = document.createElement("input");
-    amountCapInput.id = BARGAIN_SCAN_AMOUNT_CAP_INPUT_ID;
-    amountCapInput.type = "number";
-    amountCapInput.min = "0";
-    amountCapInput.step = "0.01";
-    amountCapInput.placeholder = "额度≤";
-    amountCapInput.title = "当前最低挂单价不高于该金额即命中（可留空）";
-    amountCapInput.style.cssText = inputStyle;
-    pageCountInput = document.createElement("input");
-    pageCountInput.id = BARGAIN_SCAN_PAGE_COUNT_INPUT_ID;
-    pageCountInput.type = "number";
-    pageCountInput.min = "1";
-    pageCountInput.max = "10";
-    pageCountInput.step = "1";
-    pageCountInput.placeholder = "1";
-    pageCountInput.title = "扫描的游戏页数，留空为 1（仅当前页）";
-    pageCountInput.style.cssText = "width:.45rem;height:.28rem;margin-left:.06rem;padding:0 .04rem;border:1px solid #dcdee2;border-radius:.04rem;font-size:.12rem;color:#17233d;box-sizing:border-box;vertical-align:middle;text-align:center;";
     button = document.createElement("button");
     button.id = BARGAIN_SCAN_BUTTON_ID;
     button.type = "button";
@@ -511,9 +540,8 @@ export function createSteamPyBargainScanController({
     button.textContent = "低价扫描";
     button.title = "找出平时价格不低、但现在出现明显低价挂单的游戏：历史均价需不低于“平时价”，且当前最低挂单价低于绝对价、比率或额度门限之一。";
     button.style.cssText = "margin-left:.08rem;";
-    button.addEventListener("click", startQuery);
-    anchor.append(minNormalInput, absLowInput, ratioInput, amountCapInput, button, pageCountInput);
-    restoreInputs();
+    button.addEventListener("click", openConfigPanel);
+    anchor.append(button);
     return true;
   }
 
@@ -528,17 +556,13 @@ export function createSteamPyBargainScanController({
     queryGeneration += 1;
     querying = false;
     clearMarkers();
+    closeConfigPanel();
     button?.remove();
     button = null;
-    minNormalInput?.remove();
     minNormalInput = null;
-    absLowInput?.remove();
     absLowInput = null;
-    ratioInput?.remove();
     ratioInput = null;
-    amountCapInput?.remove();
     amountCapInput = null;
-    pageCountInput?.remove();
     pageCountInput = null;
     vm = null;
   }

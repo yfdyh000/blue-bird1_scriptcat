@@ -3,9 +3,10 @@
 const TRACKER_STORAGE_KEY = "steampyGameTracker";
 const TRACKER_PANEL_ID = "steampyGameTrackerPanel";
 const TRACKER_STYLE_ID = "steampyGameTrackerStyle";
-const TRACKER_BAR_CLASS = "steamPyPlusTrackerBar";
-const TRACKER_BADGE_CLASS = "steamPyPlusTrackerBadge";
-const TRACKER_BTN_CLASS = "steamPyPlusTrackerButton";
+const TRACKER_WRAP_CLASS = "steamPyPlusTrackerWrap";
+const TRACKER_TOGGLE_CLASS = "steamPyPlusTrackerToggle";
+const TRACKER_MENU_CLASS = "steamPyPlusTrackerMenu";
+const TRACKER_ITEM_CLASS = "steamPyPlusTrackerMenuItem";
 const GAME_BLOCK_SELECTOR = ".gameblock";
 const NAME_RESOLVE_INTERVAL_MS = 300;
 const STATUS_ORDER = ["wanted", "ignored", "owned"];
@@ -292,77 +293,79 @@ export function createSteamPyGameTrackerController({
     const style = document.createElement("style");
     style.id = TRACKER_STYLE_ID;
     style.textContent = `
-      .${TRACKER_BAR_CLASS} {
+      .${TRACKER_WRAP_CLASS} {
         position: absolute;
-        top: .04rem;
-        left: 50%;
-        transform: translateX(-50%);
+        right: .04rem;
+        top: .52rem;
         z-index: 15;
-        display: flex;
-        align-items: center;
-        gap: .02rem;
-        max-width: 90%;
+        font-size: 0;
       }
-      .${TRACKER_BADGE_CLASS} {
-        padding: 0 .05rem;
+      .${TRACKER_TOGGLE_CLASS} {
+        min-width: .24rem;
         height: .16rem;
-        line-height: .16rem;
-        border-radius: .03rem;
-        font-size: .1rem;
-        font-weight: bold;
-        white-space: nowrap;
-      }
-      .${TRACKER_BTN_CLASS} {
         padding: 0 .04rem;
-        height: .16rem;
         line-height: .16rem;
         border: none;
         border-radius: .03rem;
         font-size: .1rem;
-        background: rgba(0, 0, 0, .35);
+        background: rgba(0, 0, 0, .45);
         color: #fff;
         cursor: pointer;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, .25);
       }
-      .${TRACKER_BTN_CLASS}:hover { background: rgba(0, 0, 0, .6); }
-      .${TRACKER_BTN_CLASS}[data-active="true"] { font-weight: bold; box-shadow: 0 0 0 1px #fff inset; }
+      .${TRACKER_TOGGLE_CLASS}:hover { background: rgba(0, 0, 0, .65); }
+      .${TRACKER_MENU_CLASS} {
+        position: absolute;
+        top: calc(100% + 2px);
+        right: 0;
+        display: flex;
+        flex-direction: column;
+        padding: 2px;
+        border-radius: 4px;
+        background: #fff;
+        color: #1f2329;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, .2);
+        z-index: 20;
+      }
+      .${TRACKER_MENU_CLASS}[data-open="false"] { display: none; }
+      .${TRACKER_ITEM_CLASS} {
+        min-width: .6rem;
+        padding: 3px 8px;
+        border: none;
+        border-radius: 3px;
+        background: transparent;
+        font-size: 12px;
+        line-height: 20px;
+        text-align: left;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .${TRACKER_ITEM_CLASS}:hover { background: #f2f3f5; }
+      .${TRACKER_ITEM_CLASS}[data-active="true"] { color: #165dff; font-weight: bold; }
+      .${TRACKER_ITEM_CLASS}[data-clear="true"] { color: #cb2634; }
     `;
     document.head.append(style);
   }
 
-  function trackerBarFor(block) {
-    return block.querySelector(`.${TRACKER_BAR_CLASS}`);
+  function trackerWrapFor(block) {
+    return block.querySelector(`.${TRACKER_WRAP_CLASS}`);
+  }
+
+  function closeTrackerMenu(block) {
+    block.querySelector(`.${TRACKER_MENU_CLASS}`)?.setAttribute("data-open", "false");
   }
 
   function updateTrackerBar(block, gameInfo, status) {
-    const bar = trackerBarFor(block);
-    if (!bar) return;
-    bar.replaceChildren();
-    if (status) {
-      const badge = createElement("span", {
-        className: TRACKER_BADGE_CLASS,
-        text: STATUS_LABELS[status],
-        style: Object.entries(STATUS_STYLES[status])
-          .map(([key, value]) => `${key}:${value}`)
-          .join(";"),
-      });
-      bar.append(badge);
-    }
-    STATUS_ORDER.forEach((candidate) => {
-      const active = candidate === status;
-      const button = createElement("button", {
-        className: TRACKER_BTN_CLASS,
-        type: "button",
-        text: STATUS_LABELS[candidate],
-        title: active ? `取消“${STATUS_LABELS[candidate]}”标记` : `标记为${STATUS_LABELS[candidate]}`,
-        attributes: { "data-active": active ? "true" : "false" },
-      });
-      button.addEventListener("click", (event) => {
-        event.stopPropagation();
-        const nextStatus = active ? null : candidate;
-        const current = saveStatus(gameInfo, nextStatus);
-        updateTrackerBar(block, gameInfo, current);
-      });
-      bar.append(button);
+    const wrap = trackerWrapFor(block);
+    if (!wrap) return;
+    const toggle = wrap.querySelector(`.${TRACKER_TOGGLE_CLASS}`);
+    if (!toggle) return;
+    toggle.textContent = status ? STATUS_LABELS[status] : "标";
+    toggle.title = status ? `已标记为${STATUS_LABELS[status]}，点击修改` : "标记游戏（想买/忽略/已有）";
+    toggle.style.background = status ? STATUS_STYLES[status].background : "rgba(0,0,0,.45)";
+    wrap.querySelectorAll(`.${TRACKER_ITEM_CLASS}`).forEach((item) => {
+      const itemStatus = item.dataset.status;
+      item.dataset.active = itemStatus === status ? "true" : "false";
     });
   }
 
@@ -370,10 +373,62 @@ export function createSteamPyGameTrackerController({
     if (!block || block.dataset.steamPyPlusTrackerBound) return;
     block.dataset.steamPyPlusTrackerBound = "true";
     ensureStyle();
-    const bar = createElement("div", { className: TRACKER_BAR_CLASS });
-    block.append(bar);
+    const wrap = createElement("div", { className: TRACKER_WRAP_CLASS });
+    const toggle = createElement("button", {
+      className: TRACKER_TOGGLE_CLASS,
+      type: "button",
+      text: "标",
+      title: "标记游戏（想买/忽略/已有）",
+    });
+    const menu = createElement("div", {
+      className: TRACKER_MENU_CLASS,
+      attributes: { "data-open": "false" },
+    });
     const status = statusOf(getRecords(), gameInfo);
+    toggle.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const open = menu.getAttribute("data-open") !== "true";
+      document.querySelectorAll(`.${TRACKER_MENU_CLASS}[data-open="true"]`).forEach((other) => {
+        if (other !== menu) other.setAttribute("data-open", "false");
+      });
+      menu.setAttribute("data-open", open ? "true" : "false");
+    });
+    const setAndClose = (nextStatus) => {
+      const current = saveStatus(gameInfo, nextStatus);
+      menu.setAttribute("data-open", "false");
+      updateTrackerBar(block, gameInfo, current);
+    };
+    STATUS_ORDER.forEach((candidate) => {
+      const item = createElement("button", {
+        className: TRACKER_ITEM_CLASS,
+        type: "button",
+        text: STATUS_LABELS[candidate],
+        attributes: { "data-status": candidate, "data-active": candidate === status ? "true" : "false" },
+      });
+      item.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const active = candidate === statusOf(getRecords(), gameInfo);
+        setAndClose(active ? null : candidate);
+      });
+      menu.append(item);
+    });
+    const clearItem = createElement("button", {
+      className: TRACKER_ITEM_CLASS,
+      type: "button",
+      text: "取消标记",
+      attributes: { "data-clear": "true", "data-status": "" },
+    });
+    clearItem.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setAndClose(null);
+    });
+    menu.append(clearItem);
+    wrap.append(toggle, menu);
+    block.append(wrap);
     updateTrackerBar(block, gameInfo, status);
+    document.addEventListener("click", (event) => {
+      if (!wrap.contains(event.target)) closeTrackerMenu(block);
+    });
   }
 
   function processCards(gameBlocks, games) {

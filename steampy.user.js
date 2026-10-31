@@ -1419,6 +1419,7 @@
         if (element) element.textContent = "已停止：AccessToken 已失效，请重新登录后刷新页面";
       }
     }
+    let configPanel = null;
     function persistInputs() {
       setValue?.("steamPyPlusBargainMinNormalPrice", minNormalInput?.value ?? "");
       setValue?.("steamPyPlusBargainAbsLowPrice", absLowInput?.value ?? "");
@@ -1438,9 +1439,80 @@
       if (amountCapInput) amountCapInput.value = String(amountCap ?? "");
       if (pageCountInput) pageCountInput.value = String(pageCount ?? "");
     }
-    function startQuery() {
+    function createConfigInput(id, type, placeholder, title, style) {
+      const input = document.createElement("input");
+      input.id = id;
+      input.type = type;
+      input.placeholder = placeholder;
+      input.title = title;
+      input.style.cssText = style;
+      return input;
+    }
+    function openConfigPanel() {
+      if (configPanel) return;
+      const overlay = document.createElement("div");
+      overlay.style.cssText = "position:fixed;z-index:10000;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.38);";
+      const dialog = document.createElement("section");
+      dialog.style.cssText = "width:min(5.2rem,92vw);padding:.2rem;border-radius:.08rem;background:#fff;color:#17233d;box-sizing:border-box;";
+      const title = document.createElement("h3");
+      title.style.cssText = "margin:0 0 .16rem;font-size:.18rem;";
+      title.textContent = "低价扫描参数";
+      const fieldStyle = "display:flex;align-items:center;justify-content:space-between;gap:.1rem;margin-bottom:.1rem;font-size:.13rem;";
+      const inputStyle = "width:2.4rem;height:.3rem;padding:0 .08rem;border:1px solid #dcdee2;border-radius:.04rem;font-size:.13rem;color:#17233d;box-sizing:border-box;";
+      const fields = document.createElement("div");
+      const makeField = (labelText, input) => {
+        const label = document.createElement("label");
+        label.style.cssText = fieldStyle;
+        const span = document.createElement("span");
+        span.textContent = labelText;
+        label.append(span, input);
+        return label;
+      };
+      minNormalInput = createConfigInput(BARGAIN_SCAN_MIN_NORMAL_INPUT_ID, "number", "0.6", "历史均价需达到该金额，排除本来就是低价的游戏（默认 0.6）", inputStyle);
+      absLowInput = createConfigInput(BARGAIN_SCAN_ABS_LOW_INPUT_ID, "number", "0.1", "当前最低挂单价低于该金额即命中（默认 0.1）", inputStyle);
+      ratioInput = createConfigInput(BARGAIN_SCAN_RATIO_INPUT_ID, "number", "20", "当前价不高于历史均价的该百分比即命中（默认 20%）", inputStyle);
+      amountCapInput = createConfigInput(BARGAIN_SCAN_AMOUNT_CAP_INPUT_ID, "number", "留空", "当前最低挂单价不高于该金额即命中（可留空）", inputStyle);
+      pageCountInput = createConfigInput(BARGAIN_SCAN_PAGE_COUNT_INPUT_ID, "number", "1", "扫描的游戏页数，留空为 1（仅当前页）", inputStyle);
+      fields.append(
+        makeField("平时价下限（元）", minNormalInput),
+        makeField("绝对低价（元）", absLowInput),
+        makeField("折扣比率（%）", ratioInput),
+        makeField("额度上限（元，可空）", amountCapInput),
+        makeField("扫描页数", pageCountInput)
+      );
+      const hint = document.createElement("p");
+      hint.style.cssText = "margin:.1rem 0 0;font-size:.12rem;color:#999;";
+      hint.textContent = "命中条件：历史均价不低于“平时价下限”，且当前最低挂单价低于“绝对低价”或“历史均价 × 折扣比率”或“额度上限”之一。";
+      const actions = document.createElement("div");
+      actions.style.cssText = "display:flex;justify-content:flex-end;gap:.1rem;margin-top:.16rem;";
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.className = "ivu-btn ivu-btn-default ivu-btn-sm";
+      cancel.textContent = "取消";
+      cancel.addEventListener("click", closeConfigPanel);
+      const start2 = document.createElement("button");
+      start2.type = "button";
+      start2.className = "ivu-btn ivu-btn-primary ivu-btn-sm";
+      start2.textContent = "开始扫描";
+      start2.addEventListener("click", runScan);
+      actions.append(cancel, start2);
+      dialog.append(title, fields, hint, actions);
+      overlay.append(dialog);
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) closeConfigPanel();
+      });
+      document.body.append(overlay);
+      configPanel = overlay;
+      restoreInputs();
+    }
+    function closeConfigPanel() {
+      configPanel?.remove();
+      configPanel = null;
+    }
+    function runScan() {
       if (querying) return;
       persistInputs();
+      closeConfigPanel();
       clearMarkers();
       panel = createPanel();
       runQuery();
@@ -1450,53 +1522,6 @@
       const anchor = document.querySelector(FILTER_ANCHOR_SELECTOR3);
       if (!anchor) return false;
       document.getElementById(BARGAIN_SCAN_BUTTON_ID)?.remove();
-      document.getElementById(BARGAIN_SCAN_MIN_NORMAL_INPUT_ID)?.remove();
-      document.getElementById(BARGAIN_SCAN_ABS_LOW_INPUT_ID)?.remove();
-      document.getElementById(BARGAIN_SCAN_RATIO_INPUT_ID)?.remove();
-      document.getElementById(BARGAIN_SCAN_AMOUNT_CAP_INPUT_ID)?.remove();
-      document.getElementById(BARGAIN_SCAN_PAGE_COUNT_INPUT_ID)?.remove();
-      const inputStyle = "width:.7rem;height:.28rem;margin-left:.06rem;padding:0 .04rem;border:1px solid #dcdee2;border-radius:.04rem;font-size:.12rem;color:#17233d;box-sizing:border-box;vertical-align:middle;text-align:center;";
-      minNormalInput = document.createElement("input");
-      minNormalInput.id = BARGAIN_SCAN_MIN_NORMAL_INPUT_ID;
-      minNormalInput.type = "number";
-      minNormalInput.min = "0";
-      minNormalInput.step = "0.1";
-      minNormalInput.placeholder = "平时价≥";
-      minNormalInput.title = "历史均价需达到该金额，排除本来就是低价的游戏（默认 0.6）";
-      minNormalInput.style.cssText = inputStyle;
-      absLowInput = document.createElement("input");
-      absLowInput.id = BARGAIN_SCAN_ABS_LOW_INPUT_ID;
-      absLowInput.type = "number";
-      absLowInput.min = "0";
-      absLowInput.step = "0.01";
-      absLowInput.placeholder = "绝对价≤";
-      absLowInput.title = "当前最低挂单价低于该金额即命中（默认 0.1）";
-      absLowInput.style.cssText = inputStyle;
-      ratioInput = document.createElement("input");
-      ratioInput.id = BARGAIN_SCAN_RATIO_INPUT_ID;
-      ratioInput.type = "number";
-      ratioInput.min = "0";
-      ratioInput.step = "1";
-      ratioInput.placeholder = "比率%";
-      ratioInput.title = "当前价不高于历史均价的该百分比即命中（默认 20%）";
-      ratioInput.style.cssText = inputStyle;
-      amountCapInput = document.createElement("input");
-      amountCapInput.id = BARGAIN_SCAN_AMOUNT_CAP_INPUT_ID;
-      amountCapInput.type = "number";
-      amountCapInput.min = "0";
-      amountCapInput.step = "0.01";
-      amountCapInput.placeholder = "额度≤";
-      amountCapInput.title = "当前最低挂单价不高于该金额即命中（可留空）";
-      amountCapInput.style.cssText = inputStyle;
-      pageCountInput = document.createElement("input");
-      pageCountInput.id = BARGAIN_SCAN_PAGE_COUNT_INPUT_ID;
-      pageCountInput.type = "number";
-      pageCountInput.min = "1";
-      pageCountInput.max = "10";
-      pageCountInput.step = "1";
-      pageCountInput.placeholder = "1";
-      pageCountInput.title = "扫描的游戏页数，留空为 1（仅当前页）";
-      pageCountInput.style.cssText = "width:.45rem;height:.28rem;margin-left:.06rem;padding:0 .04rem;border:1px solid #dcdee2;border-radius:.04rem;font-size:.12rem;color:#17233d;box-sizing:border-box;vertical-align:middle;text-align:center;";
       button = document.createElement("button");
       button.id = BARGAIN_SCAN_BUTTON_ID;
       button.type = "button";
@@ -1504,9 +1529,8 @@
       button.textContent = "低价扫描";
       button.title = "找出平时价格不低、但现在出现明显低价挂单的游戏：历史均价需不低于“平时价”，且当前最低挂单价低于绝对价、比率或额度门限之一。";
       button.style.cssText = "margin-left:.08rem;";
-      button.addEventListener("click", startQuery);
-      anchor.append(minNormalInput, absLowInput, ratioInput, amountCapInput, button, pageCountInput);
-      restoreInputs();
+      button.addEventListener("click", openConfigPanel);
+      anchor.append(button);
       return true;
     }
     function start(nextVm) {
@@ -1519,17 +1543,13 @@
       queryGeneration += 1;
       querying = false;
       clearMarkers();
+      closeConfigPanel();
       button?.remove();
       button = null;
-      minNormalInput?.remove();
       minNormalInput = null;
-      absLowInput?.remove();
       absLowInput = null;
-      ratioInput?.remove();
       ratioInput = null;
-      amountCapInput?.remove();
       amountCapInput = null;
-      pageCountInput?.remove();
       pageCountInput = null;
       vm = null;
     }
@@ -3365,9 +3385,10 @@
   var TRACKER_STORAGE_KEY = "steampyGameTracker";
   var TRACKER_PANEL_ID = "steampyGameTrackerPanel";
   var TRACKER_STYLE_ID = "steampyGameTrackerStyle";
-  var TRACKER_BAR_CLASS = "steamPyPlusTrackerBar";
-  var TRACKER_BADGE_CLASS = "steamPyPlusTrackerBadge";
-  var TRACKER_BTN_CLASS = "steamPyPlusTrackerButton";
+  var TRACKER_WRAP_CLASS = "steamPyPlusTrackerWrap";
+  var TRACKER_TOGGLE_CLASS = "steamPyPlusTrackerToggle";
+  var TRACKER_MENU_CLASS = "steamPyPlusTrackerMenu";
+  var TRACKER_ITEM_CLASS = "steamPyPlusTrackerMenuItem";
   var NAME_RESOLVE_INTERVAL_MS = 300;
   var STATUS_ORDER = ["wanted", "ignored", "owned"];
   var STATUS_LABELS = Object.freeze({
@@ -3612,83 +3633,138 @@
       const style = document.createElement("style");
       style.id = TRACKER_STYLE_ID;
       style.textContent = `
-      .${TRACKER_BAR_CLASS} {
+      .${TRACKER_WRAP_CLASS} {
         position: absolute;
-        top: .04rem;
-        left: 50%;
-        transform: translateX(-50%);
+        right: .04rem;
+        top: .52rem;
         z-index: 15;
-        display: flex;
-        align-items: center;
-        gap: .02rem;
-        max-width: 90%;
+        font-size: 0;
       }
-      .${TRACKER_BADGE_CLASS} {
-        padding: 0 .05rem;
+      .${TRACKER_TOGGLE_CLASS} {
+        min-width: .24rem;
         height: .16rem;
-        line-height: .16rem;
-        border-radius: .03rem;
-        font-size: .1rem;
-        font-weight: bold;
-        white-space: nowrap;
-      }
-      .${TRACKER_BTN_CLASS} {
         padding: 0 .04rem;
-        height: .16rem;
         line-height: .16rem;
         border: none;
         border-radius: .03rem;
         font-size: .1rem;
-        background: rgba(0, 0, 0, .35);
+        background: rgba(0, 0, 0, .45);
         color: #fff;
         cursor: pointer;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, .25);
       }
-      .${TRACKER_BTN_CLASS}:hover { background: rgba(0, 0, 0, .6); }
-      .${TRACKER_BTN_CLASS}[data-active="true"] { font-weight: bold; box-shadow: 0 0 0 1px #fff inset; }
+      .${TRACKER_TOGGLE_CLASS}:hover { background: rgba(0, 0, 0, .65); }
+      .${TRACKER_MENU_CLASS} {
+        position: absolute;
+        top: calc(100% + 2px);
+        right: 0;
+        display: flex;
+        flex-direction: column;
+        padding: 2px;
+        border-radius: 4px;
+        background: #fff;
+        color: #1f2329;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, .2);
+        z-index: 20;
+      }
+      .${TRACKER_MENU_CLASS}[data-open="false"] { display: none; }
+      .${TRACKER_ITEM_CLASS} {
+        min-width: .6rem;
+        padding: 3px 8px;
+        border: none;
+        border-radius: 3px;
+        background: transparent;
+        font-size: 12px;
+        line-height: 20px;
+        text-align: left;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .${TRACKER_ITEM_CLASS}:hover { background: #f2f3f5; }
+      .${TRACKER_ITEM_CLASS}[data-active="true"] { color: #165dff; font-weight: bold; }
+      .${TRACKER_ITEM_CLASS}[data-clear="true"] { color: #cb2634; }
     `;
       document.head.append(style);
     }
-    function trackerBarFor(block) {
-      return block.querySelector(`.${TRACKER_BAR_CLASS}`);
+    function trackerWrapFor(block) {
+      return block.querySelector(`.${TRACKER_WRAP_CLASS}`);
+    }
+    function closeTrackerMenu(block) {
+      block.querySelector(`.${TRACKER_MENU_CLASS}`)?.setAttribute("data-open", "false");
     }
     function updateTrackerBar(block, gameInfo, status) {
-      const bar = trackerBarFor(block);
-      if (!bar) return;
-      bar.replaceChildren();
-      if (status) {
-        const badge = createElement2("span", {
-          className: TRACKER_BADGE_CLASS,
-          text: STATUS_LABELS[status],
-          style: Object.entries(STATUS_STYLES[status]).map(([key, value]) => `${key}:${value}`).join(";")
-        });
-        bar.append(badge);
-      }
-      STATUS_ORDER.forEach((candidate) => {
-        const active = candidate === status;
-        const button = createElement2("button", {
-          className: TRACKER_BTN_CLASS,
-          type: "button",
-          text: STATUS_LABELS[candidate],
-          title: active ? `取消“${STATUS_LABELS[candidate]}”标记` : `标记为${STATUS_LABELS[candidate]}`,
-          attributes: { "data-active": active ? "true" : "false" }
-        });
-        button.addEventListener("click", (event) => {
-          event.stopPropagation();
-          const nextStatus = active ? null : candidate;
-          const current = saveStatus(gameInfo, nextStatus);
-          updateTrackerBar(block, gameInfo, current);
-        });
-        bar.append(button);
+      const wrap = trackerWrapFor(block);
+      if (!wrap) return;
+      const toggle = wrap.querySelector(`.${TRACKER_TOGGLE_CLASS}`);
+      if (!toggle) return;
+      toggle.textContent = status ? STATUS_LABELS[status] : "标";
+      toggle.title = status ? `已标记为${STATUS_LABELS[status]}，点击修改` : "标记游戏（想买/忽略/已有）";
+      toggle.style.background = status ? STATUS_STYLES[status].background : "rgba(0,0,0,.45)";
+      wrap.querySelectorAll(`.${TRACKER_ITEM_CLASS}`).forEach((item) => {
+        const itemStatus = item.dataset.status;
+        item.dataset.active = itemStatus === status ? "true" : "false";
       });
     }
     function renderTrackerBar(block, gameInfo) {
       if (!block || block.dataset.steamPyPlusTrackerBound) return;
       block.dataset.steamPyPlusTrackerBound = "true";
       ensureStyle();
-      const bar = createElement2("div", { className: TRACKER_BAR_CLASS });
-      block.append(bar);
+      const wrap = createElement2("div", { className: TRACKER_WRAP_CLASS });
+      const toggle = createElement2("button", {
+        className: TRACKER_TOGGLE_CLASS,
+        type: "button",
+        text: "标",
+        title: "标记游戏（想买/忽略/已有）"
+      });
+      const menu = createElement2("div", {
+        className: TRACKER_MENU_CLASS,
+        attributes: { "data-open": "false" }
+      });
       const status = statusOf(getRecords(), gameInfo);
+      toggle.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const open = menu.getAttribute("data-open") !== "true";
+        document.querySelectorAll(`.${TRACKER_MENU_CLASS}[data-open="true"]`).forEach((other) => {
+          if (other !== menu) other.setAttribute("data-open", "false");
+        });
+        menu.setAttribute("data-open", open ? "true" : "false");
+      });
+      const setAndClose = (nextStatus) => {
+        const current = saveStatus(gameInfo, nextStatus);
+        menu.setAttribute("data-open", "false");
+        updateTrackerBar(block, gameInfo, current);
+      };
+      STATUS_ORDER.forEach((candidate) => {
+        const item = createElement2("button", {
+          className: TRACKER_ITEM_CLASS,
+          type: "button",
+          text: STATUS_LABELS[candidate],
+          attributes: { "data-status": candidate, "data-active": candidate === status ? "true" : "false" }
+        });
+        item.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const active = candidate === statusOf(getRecords(), gameInfo);
+          setAndClose(active ? null : candidate);
+        });
+        menu.append(item);
+      });
+      const clearItem = createElement2("button", {
+        className: TRACKER_ITEM_CLASS,
+        type: "button",
+        text: "取消标记",
+        attributes: { "data-clear": "true", "data-status": "" }
+      });
+      clearItem.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setAndClose(null);
+      });
+      menu.append(clearItem);
+      wrap.append(toggle, menu);
+      block.append(wrap);
       updateTrackerBar(block, gameInfo, status);
+      document.addEventListener("click", (event) => {
+        if (!wrap.contains(event.target)) closeTrackerMenu(block);
+      });
     }
     function processCards(gameBlocks, games) {
       gameBlocks.forEach((block, index) => {
