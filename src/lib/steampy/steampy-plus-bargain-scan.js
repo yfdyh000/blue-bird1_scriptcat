@@ -43,7 +43,7 @@ export function parseBargainConfig({
 
 export function isBargain(game, config) {
   const average = Number(game?.keyAveAmt);
-  const price = Number(game?.keyPrice ?? game?.keyTxAmt);
+  const price = Number(game?.keyTxAmt ?? game?.keyPrice);
   if (!Number.isFinite(average) || average <= 0) return false;
   if (!Number.isFinite(price) || price <= 0) return false;
   if (average < config.minNormalPrice) return false;
@@ -277,10 +277,10 @@ export function createSteamPyBargainScanController({
     average.textContent = formatPrice(game?.keyAveAmt);
     const price = document.createElement("td");
     price.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;font-weight:bold;";
-    price.textContent = formatPrice(game?.keyPrice ?? game?.keyTxAmt);
+    price.textContent = formatPrice(game?.keyTxAmt ?? game?.keyPrice);
     const ratio = document.createElement("td");
     ratio.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;";
-    ratio.textContent = formatRatio(game?.keyPrice ?? game?.keyTxAmt, game?.keyAveAmt);
+    ratio.textContent = formatRatio(game?.keyTxAmt ?? game?.keyPrice, game?.keyAveAmt);
     const status = document.createElement("td");
     status.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;";
     if (result.hit) {
@@ -314,7 +314,7 @@ export function createSteamPyBargainScanController({
       hit,
       reason: hit ? "低价" : "未达低价",
       game: enriched,
-      price: Number(enriched.keyPrice ?? enriched.keyTxAmt),
+      price: Number(enriched.keyTxAmt ?? enriched.keyPrice),
       average,
     };
   }
@@ -476,9 +476,9 @@ export function createSteamPyBargainScanController({
       label.append(span, input);
       return label;
     };
-    minNormalInput = createConfigInput(BARGAIN_SCAN_MIN_NORMAL_INPUT_ID, "number", "0.6", "历史均价需达到该金额，排除本来就是低价的游戏（默认 0.6）", inputStyle);
-    absLowInput = createConfigInput(BARGAIN_SCAN_ABS_LOW_INPUT_ID, "number", "0.1", "当前最低挂单价低于该金额即命中（默认 0.1）", inputStyle);
-    ratioInput = createConfigInput(BARGAIN_SCAN_RATIO_INPUT_ID, "number", "20", "当前价不高于历史均价的该百分比即命中（默认 20%）", inputStyle);
+    minNormalInput = createConfigInput(BARGAIN_SCAN_MIN_NORMAL_INPUT_ID, "number", "0.6", "平时价 = SteamPy 历史平均成交价（keyAveAmt），需达到该金额才扫描（默认 0.6）", inputStyle);
+    absLowInput = createConfigInput(BARGAIN_SCAN_ABS_LOW_INPUT_ID, "number", "0.1", "当前最低挂单价（keyTxAmt）低于该金额即命中（默认 0.1）", inputStyle);
+    ratioInput = createConfigInput(BARGAIN_SCAN_RATIO_INPUT_ID, "number", "20", "当前最低挂单价不高于历史均价的该百分比即命中（默认 20%）", inputStyle);
     amountCapInput = createConfigInput(BARGAIN_SCAN_AMOUNT_CAP_INPUT_ID, "number", "留空", "当前最低挂单价不高于该金额即命中（可留空）", inputStyle);
     pageCountInput = createConfigInput(BARGAIN_SCAN_PAGE_COUNT_INPUT_ID, "number", "1", "扫描的游戏页数，留空为 1（仅当前页）", inputStyle);
     fields.append(
@@ -490,9 +490,23 @@ export function createSteamPyBargainScanController({
     );
     const hint = document.createElement("p");
     hint.style.cssText = "margin:.1rem 0 0;font-size:.12rem;color:#999;";
-    hint.textContent = "命中条件：历史均价不低于“平时价下限”，且当前最低挂单价低于“绝对低价”或“历史均价 × 折扣比率”或“额度上限”之一。";
+    hint.textContent = "“平时价”指 SteamPy 历史平均成交价（keyAveAmt），来自游戏详情，不是 Steam 原价；“当前价”指 SteamPy 当前最低挂单价（keyTxAmt）。命中条件：keyAveAmt ≥ 平时价下限，且当前价 ≤ 绝对低价，或 ≤ keyAveAmt × 折扣比率，或 ≤ 额度上限（三者满足任一）。";
     const actions = document.createElement("div");
-    actions.style.cssText = "display:flex;justify-content:flex-end;gap:.1rem;margin-top:.16rem;";
+    actions.style.cssText = "display:flex;align-items:center;gap:.1rem;margin-top:.16rem;";
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.className = "ivu-btn ivu-btn-default ivu-btn-sm";
+    reset.textContent = "重置默认值";
+    reset.title = "将参数恢复为默认：平时价下限 0.6、绝对低价 0.1、折扣比率 20%、额度上限留空、页数 1";
+    reset.style.cssText = "margin-right:auto;";
+    reset.addEventListener("click", () => {
+      if (minNormalInput) minNormalInput.value = String(DEFAULT_MIN_NORMAL_PRICE);
+      if (absLowInput) absLowInput.value = String(DEFAULT_ABS_LOW_PRICE);
+      if (ratioInput) ratioInput.value = String(DEFAULT_DISCOUNT_RATIO);
+      if (amountCapInput) amountCapInput.value = "";
+      if (pageCountInput) pageCountInput.value = "1";
+      persistInputs();
+    });
     const cancel = document.createElement("button");
     cancel.type = "button";
     cancel.className = "ivu-btn ivu-btn-default ivu-btn-sm";
@@ -503,7 +517,7 @@ export function createSteamPyBargainScanController({
     start.className = "ivu-btn ivu-btn-primary ivu-btn-sm";
     start.textContent = "开始扫描";
     start.addEventListener("click", runScan);
-    actions.append(cancel, start);
+    actions.append(reset, cancel, start);
     dialog.append(title, fields, hint, actions);
     overlay.append(dialog);
     overlay.addEventListener("click", (event) => {
