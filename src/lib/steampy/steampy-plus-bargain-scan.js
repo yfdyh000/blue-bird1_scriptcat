@@ -67,6 +67,22 @@ function formatRatio(price, average) {
   return `${(priceNumber / averageNumber * 100).toFixed(1)}%`;
 }
 
+export function discountColor(ratio, price) {
+  const priceNumber = Number(price);
+  if (Number.isFinite(priceNumber) && priceNumber > 0) {
+    if (Math.abs(priceNumber - 0.1) < 0.005) return "#7d3c98";
+    if (priceNumber > 0.1 && priceNumber < 0.2) return "#008b8b";
+  }
+  if (!Number.isFinite(ratio) || ratio <= 0) return "#999";
+  if (ratio > 1) return "#8c8c8c";
+  if (ratio < 0.1) return "#00429d";
+  if (ratio < 0.2) return "#0072b2";
+  if (ratio < 0.3) return "#009e73";
+  if (ratio < 0.5) return "#e69f00";
+  if (ratio < 0.8) return "#d55e00";
+  return "#595959";
+}
+
 function waitFor(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -138,8 +154,8 @@ export function createSteamPyBargainScanController({
     let text;
     let color;
     if (result.hit) {
-      text = `✓ 低价 ${formatPrice(result.price)}`;
-      color = "#16a34a";
+      text = `✓ 低价 ${formatPrice(result.price)}${result.scarce ? "（少量）" : ""}`;
+      color = discountColor(result.price / result.average, result.price);
     } else {
       text = result.reason || "未命中";
       color = "#999";
@@ -276,18 +292,22 @@ export function createSteamPyBargainScanController({
     const average = document.createElement("td");
     average.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;";
     average.textContent = formatPrice(game?.keyAveAmt);
+    const priceNumber = Number(game?.keyTxAmt ?? game?.keyPrice);
+    const averageNumber = Number(game?.keyAveAmt);
+    const ratioValue = averageNumber > 0 ? priceNumber / averageNumber : NaN;
     const price = document.createElement("td");
-    price.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;font-weight:bold;";
-    const priceText = formatPrice(game?.keyTxAmt ?? game?.keyPrice);
+    price.style.cssText = `padding:.06rem .1rem;border:1px solid #e8eaec;font-weight:bold;color:${discountColor(ratioValue, priceNumber)};`;
+    const priceText = formatPrice(priceNumber);
     price.textContent = result.stock ? `${priceText}（${result.stock}）` : priceText;
     const ratio = document.createElement("td");
-    ratio.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;";
-    ratio.textContent = formatRatio(game?.keyTxAmt ?? game?.keyPrice, game?.keyAveAmt);
+    ratio.style.cssText = `padding:.06rem .1rem;border:1px solid #e8eaec;color:${discountColor(ratioValue, priceNumber)};font-weight:bold;`;
+    ratio.textContent = formatRatio(priceNumber, averageNumber);
     const status = document.createElement("td");
     status.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;";
     if (result.hit) {
-      status.textContent = "✓ 低价";
-      status.style.color = "#16a34a";
+      status.textContent = result.scarce ? "✓ 低价·少量" : "✓ 低价";
+      status.style.color = discountColor(ratioValue, priceNumber);
+      if (result.scarce) status.style.fontWeight = "bold";
     } else {
       status.textContent = result.reason || "未命中";
       status.style.color = "#999";
@@ -322,7 +342,11 @@ export function createSteamPyBargainScanController({
       return { hit: false, reason: "无在售挂单", game: enriched };
     }
     const lowestPrice = Number(lowest.keyPrice);
-    const lowestStock = Number(lowest.stock ?? 1);
+    const lowestPriceListings = available.filter((item) => Number(item.keyPrice) === lowestPrice);
+    const lowestStock = lowestPriceListings.reduce((sum, item) => sum + Number(item.stock ?? 1), 0);
+    const higherListings = available.filter((item) => Number(item.keyPrice) > lowestPrice);
+    const secondPrice = higherListings.length > 0 ? Number(higherListings[0].keyPrice) : null;
+    const scarce = secondPrice !== null && secondPrice > lowestPrice && lowestStock <= 3;
     const withSale = { ...enriched, keyTxAmt: lowestPrice };
     const hit = isBargain(withSale, config);
     return {
@@ -332,6 +356,8 @@ export function createSteamPyBargainScanController({
       price: lowestPrice,
       average,
       stock: lowestStock,
+      secondPrice,
+      scarce,
     };
   }
 
