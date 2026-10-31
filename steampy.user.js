@@ -1079,7 +1079,9 @@
   }
   function formatPrice2(value) {
     const number = Number(value);
-    return Number.isFinite(number) ? `￥${number.toFixed(2)}` : "--";
+    if (!Number.isFinite(number)) return "--";
+    if (number > 0 && number < 0.01) return `￥${number.toFixed(4)}`;
+    return `￥${number.toFixed(2)}`;
   }
   function formatRatio(price, average) {
     const priceNumber = Number(price);
@@ -1110,7 +1112,6 @@
     let activeLastCheckedPage = 1;
     let activeBasePageNumber = 1;
     let activeRequestCount = 0;
-    let activeTotalRequests = 0;
     let closeWaiters = [];
     function gameList() {
       return Array.isArray(vm?.gameList) ? vm.gameList : [];
@@ -1238,7 +1239,7 @@
       if (!element) return;
       const hitCount = panel ? [...panel.querySelectorAll("tbody tr[data-hit='1']")].length : 0;
       const currentPage = Math.max(1, activeLastCheckedPage - activeBasePageNumber + 1);
-      element.textContent = `已处理 ${completed}/${total} · 命中 ${hitCount} · 第 ${currentPage}/${activePageCount} 页 · 请求 ${activeRequestCount}/${activeTotalRequests}`;
+      element.textContent = `已处理 ${completed}/${total} · 命中 ${hitCount} · 第 ${currentPage}/${activePageCount} 页 · 请求 ${activeRequestCount}`;
     }
     function renderRow(index, game, result, region) {
       if (!panel) return;
@@ -1281,7 +1282,8 @@
       average.textContent = formatPrice2(game?.keyAveAmt);
       const price = document.createElement("td");
       price.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;font-weight:bold;";
-      price.textContent = formatPrice2(game?.keyTxAmt ?? game?.keyPrice);
+      const priceText = formatPrice2(game?.keyTxAmt ?? game?.keyPrice);
+      price.textContent = result.stock ? `${priceText}（${result.stock}）` : priceText;
       const ratio = document.createElement("td");
       ratio.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;";
       ratio.textContent = formatRatio(game?.keyTxAmt ?? game?.keyPrice, game?.keyAveAmt);
@@ -1312,13 +1314,25 @@
       if (!Number.isFinite(average) || average <= 0) {
         return { hit: false, reason: "无历史均价", game: enriched };
       }
-      const hit = isBargain(enriched, config);
+      activeRequestCount += 1;
+      const saleData = await client.fetchKeySaleList({ region, gameId, pageNumber: 1, pageSize: 20 });
+      const listings = saleData?.content ?? saleData?.result?.content ?? [];
+      const available = listings.filter((item) => Number(item?.stock ?? 1) > 0 && Number(item?.keyPrice) > 0).sort((first, second) => Number(first.keyPrice) - Number(second.keyPrice));
+      const lowest = available[0];
+      if (!lowest) {
+        return { hit: false, reason: "无在售挂单", game: enriched };
+      }
+      const lowestPrice = Number(lowest.keyPrice);
+      const lowestStock = Number(lowest.stock ?? 1);
+      const withSale = { ...enriched, keyTxAmt: lowestPrice };
+      const hit = isBargain(withSale, config);
       return {
         hit,
         reason: hit ? "低价" : "未达低价",
-        game: enriched,
-        price: Number(enriched.keyTxAmt ?? enriched.keyPrice),
-        average
+        game: withSale,
+        price: lowestPrice,
+        average,
+        stock: lowestStock
       };
     }
     async function runQuery() {
@@ -1361,7 +1375,6 @@
         games = collected;
       }
       const total = games.length;
-      activeTotalRequests = total + (pageCount > 1 ? pageCount - 1 : 0);
       renderProgress(0, total);
       if (!total) return;
       querying = true;
@@ -1411,7 +1424,6 @@
       await Promise.all(Array.from({ length: QUERY_CONCURRENCY2 }, () => worker()));
       querying = false;
       if (generation !== queryGeneration) return;
-      activeTotalRequests = activeRequestCount;
       renderProgress(total, total);
       applyHitOnlyFilter();
       if (client?.isTokenInvalid?.()) {
