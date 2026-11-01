@@ -553,11 +553,6 @@ export function createSteamPyBargainScanController({
     if (!total) return;
     querying = true;
     closeWaiters = [];
-    const tbody = panel?.querySelector("tbody");
-    for (let index = 0; index < total; index += 1) {
-      const row = document.createElement("tr");
-      tbody.append(row);
-    }
     let completed = 0;
     let nextIndex = 0;
 
