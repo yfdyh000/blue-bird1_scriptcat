@@ -363,10 +363,10 @@ export function createSteamPyBargainScanController({
     row.dataset.hit = result.hit ? "1" : "0";
     row.dataset.sortName = gameNameOf(game);
     row.dataset.sortRating = Number(game?.rating) || 0;
-    row.dataset.sortAverage = Number(game?.keyAveAmt) || 0;
-    row.dataset.sortPrice = Number(game?.keyTxAmt ?? game?.keyPrice) || 0;
-    const averageForSort = Number(game?.keyAveAmt);
-    const priceForSort = Number(game?.keyTxAmt ?? game?.keyPrice);
+    row.dataset.sortAverage = Number(result.average ?? game?.keyAveAmt) || 0;
+    row.dataset.sortPrice = Number(result.price ?? game?.keyTxAmt ?? game?.keyPrice) || 0;
+    const averageForSort = Number(result.average ?? game?.keyAveAmt);
+    const priceForSort = Number(result.price ?? game?.keyTxAmt ?? game?.keyPrice);
     row.dataset.sortRatio = averageForSort > 0 ? priceForSort / averageForSort : 999;
     row.dataset.sortStatus = result.hit ? (result.scarce ? 0 : 1) : 2;
     row.style.display = "none";
@@ -405,9 +405,9 @@ export function createSteamPyBargainScanController({
     }
     const average = document.createElement("td");
     average.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;";
-    average.textContent = formatPrice(game?.keyAveAmt);
-    const priceNumber = Number(game?.keyTxAmt ?? game?.keyPrice);
-    const averageNumber = Number(game?.keyAveAmt);
+    average.textContent = formatPrice(result.average ?? game?.keyAveAmt);
+    const priceNumber = Number(result.price ?? game?.keyTxAmt ?? game?.keyPrice);
+    const averageNumber = Number(result.average ?? game?.keyAveAmt);
     const ratioValue = averageNumber > 0 ? priceNumber / averageNumber : NaN;
     const price = document.createElement("td");
     price.style.cssText = `padding:.06rem .1rem;border:1px solid #e8eaec;font-weight:bold;color:${discountColor(ratioValue, priceNumber)};`;

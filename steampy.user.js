@@ -3,7 +3,7 @@
 // @name:zh-CN      SteamPy Plus
 // @name:en         SteamPy Plus
 // @namespace       https://github.com/blue-bird1/scriptcat/steampy-lowest-listing-price
-// @version         1.1.0.202611011305
+// @version         1.1.0.202611090650
 // @description     增强购买Steampy密钥的体验：价格筛选、满减可用挂单查看、低价挂单扫描、游戏清单管理，支持鼠标中键打开Steam页面。
 // @description:en  Enhance Steampy key purchasing: price filters, coupon-eligible listings, bargain listing scan, game list management, and middle-click to open Steam pages.
 // @match           https://steampy.com/*
@@ -1359,10 +1359,10 @@
       row.dataset.hit = result.hit ? "1" : "0";
       row.dataset.sortName = gameNameOf(game);
       row.dataset.sortRating = Number(game?.rating) || 0;
-      row.dataset.sortAverage = Number(game?.keyAveAmt) || 0;
-      row.dataset.sortPrice = Number(game?.keyTxAmt ?? game?.keyPrice) || 0;
-      const averageForSort = Number(game?.keyAveAmt);
-      const priceForSort = Number(game?.keyTxAmt ?? game?.keyPrice);
+      row.dataset.sortAverage = Number(result.average ?? game?.keyAveAmt) || 0;
+      row.dataset.sortPrice = Number(result.price ?? game?.keyTxAmt ?? game?.keyPrice) || 0;
+      const averageForSort = Number(result.average ?? game?.keyAveAmt);
+      const priceForSort = Number(result.price ?? game?.keyTxAmt ?? game?.keyPrice);
       row.dataset.sortRatio = averageForSort > 0 ? priceForSort / averageForSort : 999;
       row.dataset.sortStatus = result.hit ? result.scarce ? 0 : 1 : 2;
       row.style.display = "none";
@@ -1401,9 +1401,9 @@
       }
       const average = document.createElement("td");
       average.style.cssText = "padding:.06rem .1rem;border:1px solid #e8eaec;";
-      average.textContent = formatPrice2(game?.keyAveAmt);
-      const priceNumber = Number(game?.keyTxAmt ?? game?.keyPrice);
-      const averageNumber = Number(game?.keyAveAmt);
+      average.textContent = formatPrice2(result.average ?? game?.keyAveAmt);
+      const priceNumber = Number(result.price ?? game?.keyTxAmt ?? game?.keyPrice);
+      const averageNumber = Number(result.average ?? game?.keyAveAmt);
       const ratioValue = averageNumber > 0 ? priceNumber / averageNumber : NaN;
       const price = document.createElement("td");
       price.style.cssText = `padding:.06rem .1rem;border:1px solid #e8eaec;font-weight:bold;color:${discountColor(ratioValue, priceNumber)};`;
