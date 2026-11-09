@@ -3,7 +3,7 @@
 // @name:zh-CN      SteamPy Plus
 // @name:en         SteamPy Plus
 // @namespace       https://github.com/blue-bird1/scriptcat/steampy-lowest-listing-price
-// @version         1.1.0.202611090650
+// @version         1.1.0.202611090821
 // @description     增强购买Steampy密钥的体验：价格筛选、满减可用挂单查看、低价挂单扫描、游戏清单管理，支持鼠标中键打开Steam页面。
 // @description:en  Enhance Steampy key purchasing: price filters, coupon-eligible listings, bargain listing scan, game list management, and middle-click to open Steam pages.
 // @match           https://steampy.com/*
@@ -1080,6 +1080,7 @@
     if (!Number.isFinite(average) || average <= 0) return false;
     if (!Number.isFinite(price) || price <= 0) return false;
     if (average < config.minNormalPrice) return false;
+    if (price >= average) return false;
     if (config.absLowPrice > 0 && price <= config.absLowPrice) return true;
     if (config.discountRatio > 0 && price <= average * config.discountRatio) return true;
     if (config.amountCap !== null && price <= config.amountCap) return true;

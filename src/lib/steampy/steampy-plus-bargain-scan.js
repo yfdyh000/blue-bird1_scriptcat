@@ -55,6 +55,7 @@ export function isBargain(game, config) {
   if (!Number.isFinite(average) || average <= 0) return false;
   if (!Number.isFinite(price) || price <= 0) return false;
   if (average < config.minNormalPrice) return false;
+  if (price >= average) return false;
   if (config.absLowPrice > 0 && price <= config.absLowPrice) return true;
   if (config.discountRatio > 0 && price <= average * config.discountRatio) return true;
   if (config.amountCap !== null && price <= config.amountCap) return true;
